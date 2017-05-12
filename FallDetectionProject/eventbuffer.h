@@ -1,0 +1,59 @@
+#ifndef EVENTFIFO_H
+#define EVENTFIFO_H
+
+#include <QMutex>
+
+#include <deque>
+
+#include <libcaer/events/polarity.h>
+
+#include "datatypes.h"
+
+class EventBuffer
+{
+public:
+    EventBuffer();
+
+    /**
+    * @brief EventBuffer Creates an empty event buffer that
+    *        holds all events in the specified timewindow.
+    * @param timewindow
+    */
+    void setup(const uint32_t timewindow);
+
+    /**
+     * @brief addEvent Adds a new event to the
+     *        buffer and removes all old events
+     * @param event
+     */
+    void addEvent(const sDVSEventDepacked & event);
+
+
+    int getSize()
+    {
+        return m_buffer.size();
+    }
+
+    std::deque<sDVSEventDepacked> &getLockedBuffer()
+    {
+        // Lock the buffer
+        m_lock.lock();
+        return m_buffer;
+    }
+
+    void releaseLockedBuffer()
+    {
+        m_lock.unlock();
+    }
+
+protected:
+    // Queue used as event buffer
+    // deque provides fast insert and delete operataions.
+    std::deque<sDVSEventDepacked> m_buffer;
+
+    uint32_t m_timewindow;
+
+    QMutex m_lock;
+};
+
+#endif // EVENTFIFO_H

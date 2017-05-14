@@ -2,7 +2,7 @@
 
 #include <QPainter>
 
-SimpleTimePlot::SimpleTimePlot(QWidget *parent) : QWidget(parent),m_timePlotMode(false)
+SimpleTimePlot::SimpleTimePlot(QWidget *parent) : QWidget(parent),m_tite("Untitled")
 {
 
 }
@@ -49,25 +49,34 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     }
 
     painter.drawLines(lines);
+    // Print value next to line end
+    QFontMetrics fm = painter.fontMetrics();
+    QString val = QString("%1").arg(m_data.rbegin()->second);
+    painter.drawText(lastPoint.x()-fm.width(val)-1,lastPoint.y()-5,val);
+
 }
 QRect SimpleTimePlot::drawFrame(QPainter *painter)
 {
     int borderX = 50;
     int borderY = 20;
-    QRect plotFrame(borderX,borderY,width()-2*borderX,height()-2*borderY);
+    QRect plotFrame(borderX,borderY,qMax(0,width()-2*borderX),qMax(0,height()-2*borderY));
     painter->setPen(QPen(Qt::red));
     painter->drawRect(0,0,width()-1,height()-1);
     painter->drawRect(plotFrame);
 
     painter->setPen(QPen(Qt::black));
     QFontMetrics fm = painter->fontMetrics();
+    int fontHeight = fm.height();
     QString xMin = QString("%1").arg(m_xMin);
     QString xMax = QString("%1").arg(m_xMax);
     QString yMin = QString("%1").arg(m_yMin);
     QString yMax = QString("%1").arg(m_yMax);
-    painter->drawText(plotFrame.x(),15+plotFrame.y()+plotFrame.height(),xMin);
-    painter->drawText(plotFrame.x()+ plotFrame.width() - fm.width(xMax),15+plotFrame.y()+plotFrame.height(),xMax);
+    painter->drawText(plotFrame.x(),fontHeight+plotFrame.y()+plotFrame.height(),xMin);
+    painter->drawText(plotFrame.x()+ plotFrame.width() - fm.width(xMax),fontHeight+plotFrame.y()+plotFrame.height(),xMax);
     painter->drawText(borderX-1-fm.width(yMin),plotFrame.y()+plotFrame.height(),yMin);
-    painter->drawText(borderX-1-fm.width(yMax),15+plotFrame.y(),yMax);
+    painter->drawText(borderX-1-fm.width(yMax),fontHeight+plotFrame.y(),yMax);
+
+    // Draw header
+    painter->drawText(borderX,fontHeight, m_tite);
     return plotFrame;
 }

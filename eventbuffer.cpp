@@ -28,10 +28,9 @@ void EventBuffer::addEvent(const sDVSEventDepacked &event)
     m_buffer.push_front(event);
 }
 
-QImage EventBuffer::toImage()
+QImage EventBuffer::toImage(int maxEventCntPerPx)
 {
     QImage img(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT,QImage::Format_RGB888);
-    int maxEventCntPerPx = 2;
     int colorOffset = 255/maxEventCntPerPx;
 
     img.fill(Qt::white);

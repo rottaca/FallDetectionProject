@@ -54,7 +54,7 @@ public:
         m_lock.unlock();
     }
 
-    QImage toImage();
+    QImage toImage(int maxEventCntPerPx = 2);
 
 protected:
     // Queue used as event buffer

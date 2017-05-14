@@ -1,6 +1,9 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include <QPainter>
+
+#include "settings.h"
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -8,20 +11,18 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    p = new SimpleTimePlot(this);
-    p->setRange(0,1,0,1);
-    p->enableTimePlotMode(true,1);
-    p2 = new SimpleTimePlot(this);
-    p2->setRange(0,1,0,30000);
-    p2->enableTimePlotMode(true,10000);
+    plotEventsInWindow = new SimpleTimePlot(this);
+    plotEventsInWindow->setYRange(0,70000);
+    plotEventsInWindow->setXRange(100000);
+    plotEventsInWindow->setTitle("Event Count");
 
-    prevX = 0;
-    prevY = 0;
-    prevX2 = 0;
-    prevY2 = 0;
+    plotVerticalCentroid = new SimpleTimePlot(this);
+    plotVerticalCentroid->setYRange(0,DAVIS_IMG_HEIGHT);
+    plotVerticalCentroid->setXRange(100000);
+    plotVerticalCentroid->setTitle("Vertical centroid");
 
-    ui->gridLayout->addWidget(p);
-    ui->gridLayout->addWidget(p2);
+    ui->gridLayout->addWidget(plotEventsInWindow);
+    ui->gridLayout->addWidget(plotVerticalCentroid);
 
     connect(&proc,SIGNAL(updateUI(QString)),this,SLOT(updateUI(QString)));
 
@@ -53,19 +54,26 @@ void MainWindow::updateUI(QString msg)
 void MainWindow::redrawUI()
 {
     EventBuffer & buff = proc.getBuffer();
+    Processor::sObjectStats stats = proc.getStats();
 
-    float currX = prevX+0.01f;
-    float currY = prevY*0.9+0.1*((float)qrand()/RAND_MAX);
-    p->addPoint(currX,currY);
-    prevX = currX;
-    prevY = currY;
-    float currY2 = buff.getSize();
     int time = buff.getCurrTime();
-    p2->addPoint(time,currY2);
+    int evCnt = buff.getSize();
+    plotEventsInWindow->addPoint(time,evCnt);
+    plotVerticalCentroid->addPoint(time,stats.center.y());
+    plotEventsInWindow->update();
+    plotVerticalCentroid->update();
 
-    p2->update();
-    p->update();
+    QImage img = buff.toImage();
+    QPixmap pix = QPixmap::fromImage(img);
+    QPainter painter(&pix);
+    QPen pen(Qt::red,4);
+    painter.setPen(pen);
+    painter.drawRect(stats.center.x()-stats.std.x(),stats.center.y()-stats.std.y(),2*stats.std.x(),2*stats.std.y());
+    QPen pen2(Qt::green,4);
+    painter.setPen(pen2);
+    painter.drawPoint(stats.center);
+    painter.end();
 
-    ui->label->setPixmap(QPixmap::fromImage(buff.toImage()));
-
+    ui->label->setPixmap(pix);
+    ui->label_2->setText(QString("Events: %1").arg(evCnt));
 }

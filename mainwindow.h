@@ -32,14 +32,11 @@ public slots:
 
 private:
     Ui::MainWindow *ui;
-    SimpleTimePlot *p,*p2;
     QTimer* timer;
     CameraHandlerDavis camHandler;
     Processor proc;
-    float prevX;
-    float prevY;
-    float prevX2;
-    float prevY2;
+
+    SimpleTimePlot *plotEventsInWindow,*plotVerticalCentroid;
 };
 
 #endif // MAINWINDOW_H

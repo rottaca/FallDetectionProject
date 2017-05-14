@@ -30,7 +30,8 @@ SOURCES += main.cpp\
     eventbuffer.cpp \
     camerahandlerdavis.cpp \
     processor.cpp \
-    simpletimeplot.cpp
+    simpletimeplot.cpp \
+aspectratiopixmap.cpp
 
 HEADERS  += mainwindow.h \
     eventbuffer.h \
@@ -38,6 +39,7 @@ HEADERS  += mainwindow.h \
     processor.h \
     datatypes.h \
     simpletimeplot.h \
-    settings.h
+    settings.h \
+aspectratiopixmap.h
 
 FORMS    += mainwindow.ui

@@ -86,7 +86,7 @@ void CameraHandlerDavis::run()
         ////////////
         sDVSEventDepacked e;
         e.ts = currTs;
-        currTs += qrand() % 5;
+        currTs += qrand() % 2;
         e.x = qrand() % DAVIS_IMG_WIDHT;
         e.y = qrand() % DAVIS_IMG_HEIGHT;
         e.pol = 1;

@@ -2,11 +2,17 @@
 
 #include <QtConcurrent/QtConcurrent>
 
+#include "settings.h"
+
 Processor::Processor():
     m_timewindow(30000),
     m_updateStatsInterval(100)
 {
     m_eventBuffer.setup(m_timewindow);
+
+    m_stats.roi = QRectF(0,0,DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT);
+    m_stats.evCnt = 0;
+
 }
 void Processor::start()
 {
@@ -58,7 +64,7 @@ void Processor::run()
             // Recompute buffer stats ?
             if(m_updateStatsTimer.elapsed() > m_updateStatsInterval) {
                 m_updateStatsTimer.restart();
-                // updateStatistics();
+                updateStatistics();
             }
         }
     }
@@ -67,31 +73,47 @@ void Processor::run()
 
 void Processor::updateStatistics()
 {
+    QMutexLocker locker(&m_statsMutex);
+    updateObjectStats(m_stats);
+}
+
+void Processor::updateObjectStats(sObjectStats &st)
+{
     auto & buff = m_eventBuffer.getLockedBuffer();
 
-    QPointF center(0,0);
     QPointF tmp;
+    st.center.setX(0);
+    st.center.setY(0);
+    st.evCnt = 0;
     for(sDVSEventDepacked e:buff) {
-        tmp.setX(e.x);
-        tmp.setY(e.y);
-        center += tmp;
+        if(e.x >= st.roi.x() && e.x <= st.roi.x()+st.roi.width() &&
+                e.y >= st.roi.y() && e.y <= st.roi.y()+st.roi.height()) {
+            tmp.setX(e.x);
+            tmp.setY(e.y);
+            st.center += tmp;
+            st.evCnt++;
+        }
     }
-    center /= buff.size();
-    printf("Center: %fx%f\n",center.x(),center.y());
+    st.center /= st.evCnt;
+    //printf("Center: %fx%f\n",m_center.x(),m_center.y());
 
-    QPointF std(0,0);
+    st.std.setX(0);
+    st.std.setY(0);
     for(sDVSEventDepacked e:buff) {
-        tmp.setX(e.x);
-        tmp.setY(e.y);
-        tmp -= center;
-        tmp.setX(tmp.x()*tmp.x());
-        tmp.setY(tmp.y()*tmp.y());
-        std += tmp;
+        if(e.x >= st.roi.x() && e.x <= st.roi.x()+st.roi.width() &&
+                e.y >= st.roi.y() && e.y <= st.roi.y()+st.roi.height()) {
+            tmp.setX(e.x);
+            tmp.setY(e.y);
+            tmp -= st.center;
+            tmp.setX(tmp.x()*tmp.x());
+            tmp.setY(tmp.y()*tmp.y());
+            tmp.setX(sqrtf(tmp.x()));
+            tmp.setY(sqrtf(tmp.y()));
+            st.std += tmp;
+        }
     }
-    std.setX(sqrtf(std.x()));
-    std.setY(sqrtf(std.y()));
-    std /= buff.size();
-    printf("Std: %fx%f\n",std.x(),std.y());
+    st.std /= st.evCnt;
+    //printf("Std: %fx%f\n",m_std.x(),m_std.y());
 
     m_eventBuffer.releaseLockedBuffer();
 }

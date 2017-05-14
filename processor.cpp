@@ -58,7 +58,7 @@ void Processor::run()
             // Recompute buffer stats ?
             if(m_updateStatsTimer.elapsed() > m_updateStatsInterval) {
                 m_updateStatsTimer.restart();
-                updateStatistics();
+                // updateStatistics();
             }
         }
     }

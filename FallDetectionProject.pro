@@ -37,6 +37,7 @@ HEADERS  += mainwindow.h \
     camerahandlerdavis.h \
     processor.h \
     datatypes.h \
-    simpletimeplot.h
+    simpletimeplot.h \
+    settings.h
 
 FORMS    += mainwindow.ui

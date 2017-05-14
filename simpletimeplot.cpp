@@ -2,7 +2,7 @@
 
 #include <QPainter>
 
-SimpleTimePlot::SimpleTimePlot(QWidget *parent) : QWidget(parent)
+SimpleTimePlot::SimpleTimePlot(QWidget *parent) : QWidget(parent),m_timePlotMode(false)
 {
 
 }
@@ -52,7 +52,7 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
 }
 QRect SimpleTimePlot::drawFrame(QPainter *painter)
 {
-    int borderX = 30;
+    int borderX = 50;
     int borderY = 20;
     QRect plotFrame(borderX,borderY,width()-2*borderX,height()-2*borderY);
     painter->setPen(QPen(Qt::red));

@@ -6,6 +6,7 @@
 #include <QWaitCondition>
 #include <QFuture>
 #include <QElapsedTimer>
+#include <QImage>
 
 #include <atomic>
 #include <queue>
@@ -31,6 +32,11 @@ public:
     void newFrame(const caerFrameEvent & frame);
 
     void run();
+
+    EventBuffer &getBuffer()
+    {
+        return m_eventBuffer;
+    }
 
 signals:
     void updateUI(QString msg);

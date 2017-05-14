@@ -10,8 +10,10 @@ MainWindow::MainWindow(QWidget *parent) :
 
     p = new SimpleTimePlot(this);
     p->setRange(0,1,0,1);
+    p->enableTimePlotMode(true,1);
     p2 = new SimpleTimePlot(this);
-    p2->setRange(0,1,0,1);
+    p2->setRange(0,1,0,30000);
+    p2->enableTimePlotMode(true,10000);
 
     prevX = 0;
     prevY = 0;
@@ -30,8 +32,8 @@ MainWindow::MainWindow(QWidget *parent) :
     camHandler.startStreaming();
 
     timer = new QTimer(this);
-    connect(timer,SIGNAL(timeout()),this,SLOT(insertPoint()));
-    timer->start(1);
+    connect(timer,SIGNAL(timeout()),this,SLOT(redrawUI()));
+    timer->start(30);
 }
 
 MainWindow::~MainWindow()
@@ -48,21 +50,22 @@ void MainWindow::updateUI(QString msg)
 
 }
 
-void MainWindow::insertPoint()
+void MainWindow::redrawUI()
 {
+    EventBuffer & buff = proc.getBuffer();
+
     float currX = prevX+0.01f;
     float currY = prevY*0.9+0.1*((float)qrand()/RAND_MAX);
-    p->setRange(currX-1,currX,0,1);
     p->addPoint(currX,currY);
     prevX = currX;
     prevY = currY;
-    float currX2 = prevX2+0.01f;
-    float currY2 = prevY2*0.9+0.1*((float)qrand()/RAND_MAX);
-    p2->setRange(currX2-1,currX2,0,1);
-    p2->addPoint(currX2,currY2);
-    prevX2 = currX2;
-    prevY2 = currY2;
+    float currY2 = buff.getSize();
+    int time = buff.getCurrTime();
+    p2->addPoint(time,currY2);
 
     p2->update();
     p->update();
+
+    ui->label->setPixmap(QPixmap::fromImage(buff.toImage()));
+
 }

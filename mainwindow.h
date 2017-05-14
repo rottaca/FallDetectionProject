@@ -28,7 +28,7 @@ public:
 
 public slots:
     void updateUI(QString msg);
-    void insertPoint();
+    void redrawUI();
 
 private:
     Ui::MainWindow *ui;

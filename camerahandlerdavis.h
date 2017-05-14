@@ -56,6 +56,8 @@ protected:
 
     IDVSEventReciever* m_eventReciever;
     IFrameReciever* m_frameReciever;
+
+    int32_t currTs;
 };
 
 #endif // CAMERAHANDLER_H

@@ -3,6 +3,7 @@
 
 #include <QtConcurrent/QtConcurrent>
 
+#include "settings.h"
 
 CameraHandlerDavis::CameraHandlerDavis()
     :m_davisHandle(NULL),
@@ -11,24 +12,24 @@ CameraHandlerDavis::CameraHandlerDavis()
      m_eventReciever(nullptr),
      m_frameReciever(nullptr)
 {
-
+    currTs = 0;
 }
 CameraHandlerDavis::~CameraHandlerDavis()
 {
-    QMutexLocker locker(&m_camLock);
     if(m_isStreaming)
         stopStreaming();
     if(m_isConnected)
         disconnect();
+    QMutexLocker locker(&m_camLock);
 }
 
 void CameraHandlerDavis::disconnect()
 {
-    QMutexLocker locker(&m_camLock);
     if(m_isStreaming)
         stopStreaming();
 
     m_isConnected = false;
+    QMutexLocker locker(&m_camLock);
     caerDeviceClose(&m_davisHandle);
 }
 
@@ -81,13 +82,28 @@ void CameraHandlerDavis::run()
     caerDeviceDataStart(m_davisHandle, NULL, NULL, NULL, NULL, NULL);
 
     while (m_isStreaming) {
+        // DEBUG CODE
+        ////////////
+        sDVSEventDepacked e;
+        e.ts = currTs;
+        currTs += qrand() % 5;
+        e.x = qrand() % DAVIS_IMG_WIDHT;
+        e.y = qrand() % DAVIS_IMG_HEIGHT;
+        e.pol = 1;
+
+        if(m_frameReciever != nullptr) {
+            m_eventReciever->newEvent(e);
+        }
+        ////////////
+
         QMutexLocker locker(&m_camLock);
         caerEventPacketContainer packetContainer = caerDeviceDataGet(m_davisHandle);
         if (packetContainer == NULL) {
             QThread::usleep(1);
             continue; // Skip if nothing there.
-            // printf("No Data for camera handler..\n");
+            //printf("No Data for camera handler..\n");
         }
+
         int32_t packetNum = caerEventPacketContainerGetEventPacketsNumber(packetContainer);
         //printf("\nGot event container with %d packets (allocated).\n", packetNum);
         // Iterate over all recieved packets

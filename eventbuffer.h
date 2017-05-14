@@ -2,6 +2,7 @@
 #define EVENTFIFO_H
 
 #include <QMutex>
+#include <QImage>
 
 #include <deque>
 
@@ -31,7 +32,14 @@ public:
 
     int getSize()
     {
+        QMutexLocker locker(&m_lock);
         return m_buffer.size();
+    }
+
+    uint32_t getCurrTime()
+    {
+        QMutexLocker locker(&m_lock);
+        return m_buffer.front().ts;
     }
 
     std::deque<sDVSEventDepacked> &getLockedBuffer()
@@ -46,12 +54,14 @@ public:
         m_lock.unlock();
     }
 
+    QImage toImage();
+
 protected:
     // Queue used as event buffer
     // deque provides fast insert and delete operataions.
     std::deque<sDVSEventDepacked> m_buffer;
 
-    uint32_t m_timewindow;
+    uint32_t m_timeWindow;
 
     QMutex m_lock;
 };

@@ -29,12 +29,14 @@ SOURCES += main.cpp\
         mainwindow.cpp \
     eventbuffer.cpp \
     camerahandlerdavis.cpp \
-    processor.cpp
+    processor.cpp \
+    simpletimeplot.cpp
 
 HEADERS  += mainwindow.h \
     eventbuffer.h \
     camerahandlerdavis.h \
     processor.h \
-    datatypes.h
+    datatypes.h \
+    simpletimeplot.h
 
 FORMS    += mainwindow.ui

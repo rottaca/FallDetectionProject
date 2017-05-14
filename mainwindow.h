@@ -4,7 +4,9 @@
 #include <QMainWindow>
 #include <QString>
 #include <QCloseEvent>
+#include <QTimer>
 
+#include "simpletimeplot.h"
 
 #include "camerahandlerdavis.h"
 #include "processor.h"
@@ -26,12 +28,18 @@ public:
 
 public slots:
     void updateUI(QString msg);
+    void insertPoint();
 
 private:
     Ui::MainWindow *ui;
-
+    SimpleTimePlot *p,*p2;
+    QTimer* timer;
     CameraHandlerDavis camHandler;
     Processor proc;
+    float prevX;
+    float prevY;
+    float prevX2;
+    float prevY2;
 };
 
 #endif // MAINWINDOW_H

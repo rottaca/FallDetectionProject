@@ -38,6 +38,7 @@ void Processor::newFrame(const caerFrameEvent &frame)
 void Processor::run()
 {
     printf("Processor started.\n");
+    m_updateStatsTimer.start();
     while (m_isRunning) {
 
         // New events available ?
@@ -56,6 +57,7 @@ void Processor::run()
             }
             // Recompute buffer stats ?
             if(m_updateStatsTimer.elapsed() > m_updateStatsInterval) {
+                m_updateStatsTimer.restart();
                 updateStatistics();
             }
         }

@@ -24,6 +24,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 LIBS += -lcaer
 #INCLUDEPATH += /usr/include
+LIBS += `pkg-config --libs opencv`
 
 SOURCES += main.cpp\
         mainwindow.cpp \
@@ -31,7 +32,7 @@ SOURCES += main.cpp\
     camerahandlerdavis.cpp \
     processor.cpp \
     simpletimeplot.cpp \
-aspectratiopixmap.cpp
+    aspectratiopixmap.cpp
 
 HEADERS  += mainwindow.h \
     eventbuffer.h \
@@ -40,6 +41,6 @@ HEADERS  += mainwindow.h \
     datatypes.h \
     simpletimeplot.h \
     settings.h \
-aspectratiopixmap.h
+    aspectratiopixmap.h
 
 FORMS    += mainwindow.ui

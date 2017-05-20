@@ -27,7 +27,6 @@ public:
     void closeEvent (QCloseEvent *event);
 
 public slots:
-    void updateUI(QString msg);
     void redrawUI();
 
 private:
@@ -36,7 +35,9 @@ private:
     CameraHandlerDavis camHandler;
     Processor proc;
 
-    SimpleTimePlot *plotEventsInWindow,*plotVerticalCentroid;
+    SimpleTimePlot *plotEventsInWindow;
+    SimpleTimePlot *plotVerticalCentroid;
+    SimpleTimePlot *plotSpeed;
 };
 
 #endif // MAINWINDOW_H

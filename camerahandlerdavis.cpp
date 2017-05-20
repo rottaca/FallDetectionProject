@@ -81,7 +81,11 @@ void CameraHandlerDavis::run()
     printf("Streaming started.\n");
     caerDeviceDataStart(m_davisHandle, NULL, NULL, NULL, NULL, NULL);
 
+    QElapsedTimer timer;
+    timer.start();
+
     while (m_isStreaming) {
+        ////////////
         // DEBUG CODE
         ////////////
         sDVSEventDepacked e;
@@ -90,16 +94,21 @@ void CameraHandlerDavis::run()
         e.x = qrand() % DAVIS_IMG_WIDHT;
         e.y = qrand() % DAVIS_IMG_HEIGHT;
         e.pol = 1;
-
         if(m_frameReciever != nullptr) {
             m_eventReciever->newEvent(e);
         }
+        caerFrameEvent frame;
+        if(timer.elapsed()> 40) {
+            timer.restart();
+            //m_frameReciever->newFrame(frame);
+        }
         ////////////
-
         QMutexLocker locker(&m_camLock);
         caerEventPacketContainer packetContainer = caerDeviceDataGet(m_davisHandle);
         if (packetContainer == NULL) {
-            QThread::usleep(1);
+            // Wait a bit!
+            QThread::usleep(10);
+            //QThread::yieldCurrentThread();
             continue; // Skip if nothing there.
             //printf("No Data for camera handler..\n");
         }
@@ -120,29 +129,32 @@ void CameraHandlerDavis::run()
             // DVS-Events
             if (i == POLARITY_EVENT) {
                 caerPolarityEventPacket polarity = (caerPolarityEventPacket) packetHeader;
+                for(int i = 0; i < polarity->packetHeader.eventValid; i++) {
+                    // Get full timestamp and addresses of first event.
+                    caerPolarityEvent firstEvent = caerPolarityEventPacketGetEvent(polarity, i);
 
-                // Get full timestamp and addresses of first event.
-                caerPolarityEvent firstEvent = caerPolarityEventPacketGetEvent(polarity, 0);
+                    sDVSEventDepacked e;
+                    e.ts = caerPolarityEventGetTimestamp(firstEvent);
+                    e.x = caerPolarityEventGetX(firstEvent);
+                    e.y = caerPolarityEventGetY(firstEvent);
+                    e.pol = caerPolarityEventGetPolarity(firstEvent);
 
-                sDVSEventDepacked e;
-                e.ts = caerPolarityEventGetTimestamp(firstEvent);
-                e.x = caerPolarityEventGetX(firstEvent);
-                e.y = caerPolarityEventGetY(firstEvent);
-                e.pol = caerPolarityEventGetPolarity(firstEvent);
+                    //printf("First polarity event - ts: %d, x: %d, y: %d, pol: %d.\n", e.ts, e.x, e.y, e.pol);
 
-                //printf("First polarity event - ts: %d, x: %d, y: %d, pol: %d.\n", e.ts, e.x, e.y, e.pol);
-
-                if(m_frameReciever != nullptr) {
-                    m_eventReciever->newEvent(e);
+                    if(m_frameReciever != nullptr) {
+                        m_eventReciever->newEvent(e);
+                    }
                 }
 
             } // Frames
             else if(i == FRAME_EVENT) {
                 caerFrameEventPacket framePacket = (caerFrameEventPacket) packetHeader;
-                caerFrameEvent frame = caerFrameEventPacketGetEvent(framePacket,0);
+                for(int i = 0; i < framePacket->packetHeader.eventValid; i++) {
+                    caerFrameEvent frame = caerFrameEventPacketGetEvent(framePacket,i);
 
-                if(m_frameReciever != nullptr) {
-                    m_frameReciever->newFrame(frame);
+                    if(m_frameReciever != nullptr) {
+                        m_frameReciever->newFrame(frame);
+                    }
                 }
             }
         }

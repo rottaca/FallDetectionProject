@@ -4,43 +4,66 @@
 
 SimpleTimePlot::SimpleTimePlot(QWidget *parent) : QWidget(parent),m_tite("Untitled")
 {
-
+    this->setMinimumSize(100,100);
 }
 
 void SimpleTimePlot::paintEvent(QPaintEvent* event)
 {
-    QPainter painter(this);
-    QRect plotFrame = drawFrame(&painter);
+    QMutexLocker locker(&m_dataMutex);
+    cleanupMap();
 
+    QPainter painter(this);
+    QRectF plotFrame = drawFrame(&painter);
+    QPointF plotFrameLowRight(plotFrame.x()+plotFrame.width(),
+                              plotFrame.y()+plotFrame.height());
     painter.setPen(QPen(Qt::black));
 
+    if(m_data.size() <= 1)
+        return;
+
     QVector<QLineF> lines;
-    QPointF lastPoint(plotFrame.x(),plotFrame.y()+plotFrame.height());
+    lines.reserve(m_data.size()-1);
+    QPointF lastPoint(0,0);
+    double x,y;
     bool isOutside = false;
+    bool skippedFirst = false;
+    double dx = m_xMax-m_xMin;
+    double dy = m_yMax-m_yMin;
+
     for(auto const& p: m_data) {
-        float x,y;
-        x = plotFrame.x()+(p.first - m_xMin)/(m_xMax-m_xMin)*plotFrame.width();
-        y = plotFrame.y()+(1-(p.second - m_yMin)/(m_yMax-m_yMin))*plotFrame.height(); // Flip y axis
+        x = plotFrame.x()+(p.first - m_xMin)/dx*plotFrame.width();
+        y = plotFrame.y()+(1-(p.second - m_yMin)/dy)*plotFrame.height(); // Flip y axis
 
         QPointF newPoint;
+        // Line is inside ?
         if(p.first >= m_xMin && p.first <= m_xMax &&
                 p.second >= m_yMin && p.second <= m_yMax) {
             // Clipping with reentering line
             if(isOutside) {
-                lastPoint.setX(qMax(plotFrame.x(),qMin(plotFrame.x()+plotFrame.width(),(int)lastPoint.x())));
-                lastPoint.setY(qMax(plotFrame.y(),qMin(plotFrame.y()+plotFrame.height(),(int)lastPoint.y())));
+                lastPoint.setX(qMax(plotFrame.x(),qMin(plotFrameLowRight.x(),lastPoint.x())));
+                lastPoint.setY(qMax(plotFrame.y(),qMin(plotFrameLowRight.y(),lastPoint.y())));
                 isOutside = false;
             }
             newPoint.setX(x);
             newPoint.setY(y);
-            lines.append(QLineF(lastPoint,newPoint));
-        } else if(!isOutside) {
+
+            if(skippedFirst)
+                lines.append(QLineF(lastPoint,newPoint));
+            skippedFirst = true;
+
+        }
+        // Clip line, that comes from inside and goes to the outside ?
+        else if(!isOutside) {
             // Clip leaving line
-            newPoint.setX(qMax(plotFrame.x(),qMin(plotFrame.x()+plotFrame.width(),(int)x)));
-            newPoint.setY(qMax(plotFrame.y(),qMin(plotFrame.y()+plotFrame.height(),(int)y)));
+            newPoint.setX(qMax(plotFrame.x(),qMin(plotFrameLowRight.x(),x)));
+            newPoint.setY(qMax(plotFrame.y(),qMin(plotFrameLowRight.y(),y)));
             isOutside = true;
-            lines.append(QLineF(lastPoint,newPoint));
-        } else {
+
+            if(skippedFirst)
+                lines.append(QLineF(lastPoint,newPoint));
+            skippedFirst = true;
+        } // Store point for next run only
+        else {
             newPoint.setX(x);
             newPoint.setY(y);
         }
@@ -49,10 +72,14 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     }
 
     painter.drawLines(lines);
+
     // Print value next to line end
     QFontMetrics fm = painter.fontMetrics();
     QString val = QString("%1").arg(m_data.rbegin()->second);
-    painter.drawText(lastPoint.x()-fm.width(val)-1,lastPoint.y()-5,val);
+    x = lastPoint.x()-fm.width(val)-1;
+    // Keep y in range of plot
+    y = qMin(plotFrame.y()+plotFrame.height(),qMax(plotFrame.y()+fm.height(),lastPoint.y()-5));
+    painter.drawText(x,y,val);
 
 }
 QRect SimpleTimePlot::drawFrame(QPainter *painter)
@@ -79,4 +106,23 @@ QRect SimpleTimePlot::drawFrame(QPainter *painter)
     // Draw header
     painter->drawText(borderX,fontHeight, m_tite);
     return plotFrame;
+}
+void SimpleTimePlot::cleanupMap()
+{
+    auto itEnd = m_data.lower_bound(m_xMin);
+    if(itEnd == m_data.end())
+        return;
+    // Check if we are the first element in the list
+    // If yes, do nothing
+    int dist = std::distance(m_data.begin(),itEnd);
+    if(dist <= 0)
+        return;
+
+    // Keep the found element for clipping
+    // Only delete previous elements
+    itEnd--;
+
+    // Erase all old values
+    while(m_data.begin() != itEnd)
+        m_data.erase(m_data.begin());
 }

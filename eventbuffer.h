@@ -10,6 +10,8 @@
 
 #include "datatypes.h"
 
+#include <queue>
+
 class EventBuffer
 {
 public:
@@ -28,6 +30,7 @@ public:
      * @param event
      */
     void addEvent(const sDVSEventDepacked & event);
+    void addEvents(std::queue<sDVSEventDepacked> &events);
 
 
     int getSize()
@@ -54,7 +57,7 @@ public:
         m_lock.unlock();
     }
 
-    QImage toImage(int maxEventCntPerPx = 2);
+    QImage toImage();
 
 protected:
     // Queue used as event buffer

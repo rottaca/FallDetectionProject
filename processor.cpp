@@ -121,12 +121,11 @@ void Processor::run()
                 }
                 // Execute face detection in different thread
                 m_futureAnyncPedestrianDetector = QtConcurrent::run(this, &Processor::processImage);
-                //processImage();
             }
 
             // Recompute buffer stats
             if(m_updateStatsTimer.nsecsElapsed()/1000 > m_updateStatsInterval) {
-                uint32_t elapsedTime = m_updateStatsTimer.nsecsElapsed()/1000;
+                uint64_t elapsedTime = m_updateStatsTimer.nsecsElapsed()/1000;
                 //printf("Update: %u",elapsedTime);
                 m_updateStatsTimer.restart();
                 updateStatistics(elapsedTime);
@@ -139,6 +138,7 @@ void Processor::run()
 
 void Processor::processImage()
 {
+    QThread::currentThread()->setPriority(QThread::LowestPriority);
     std::vector<cv::Rect> roi_humans;
     {
         QMutexLocker locker(&m_frameMutex);
@@ -152,7 +152,7 @@ void Processor::processImage()
 
         //cv::imwrite( "Image.jpg", gray_image );
         std::vector<cv::Rect> found;
-        hog.detectMultiScale(image, found);
+        hog.detectMultiScale(image, found,0,cv::Size(6,6),cv::Size(32,64),1.2);
 
         size_t i, j;
         for (i=0; i<found.size(); i++) {
@@ -164,6 +164,7 @@ void Processor::processImage()
                 roi_humans.push_back(r);
             }
         }
+//        roi_humans.clear();
     }
 
     {
@@ -231,6 +232,11 @@ void Processor::processImage()
                     m_stats.push_back(o);
                     foundRects.push_back(idx);
                 }
+                // ROI not found but still really new ?
+                else if(m_eventBuffer.getCurrTime()-o.lastROIUpdate < DELAY_KEEP_ROI_US) {
+                    m_stats.push_back(o);
+                    foundRects.push_back(idx);
+                }
             }
             //printf("Tracked: %zu\n",foundRects.size());
             // Add all missing rois
@@ -252,6 +258,10 @@ void Processor::processImage()
                 m_stats.push_back(stats);
 
             }
+
+            //printf("Humans:");
+            //for(sObjectStats o:m_stats)
+            //    printf("%f %f %f %f\n",o.roi.x(),o.roi.y(),o.roi.width(),o.roi.height());
             //printf("New: %zu\n",roi_humans.size()-foundRects.size());
         }
     }
@@ -273,68 +283,78 @@ inline bool Processor::isInROI(const sDVSEventDepacked& e, const QRectF &roi)
            e.y >= roi.y() && e.y <= roi.y()+roi.height();
 }
 
-void Processor::updateObjectStats(sObjectStats &st,uint32_t elapsedTimeUs)
+void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 {
-    auto & buff = m_eventBuffer.getLockedBuffer();
-    // Extract event subset
-    /*std::vector<size_t> subsetIndices;
-    for(size_t i = 0; i < buff.size(); i++) {
-        sDVSEventDepacked & e = buff.at(i);
-        if(isInROI(e,st.roi)) {
-            subsetIndices.push_back(i);
-        }
-    }*/
-    //printf("ProcBufferSz: %zu\n",buff.size());
-
     QPointF tmp, newCenter, newStd, newVelocity;
     size_t evCnt = 0;
     newCenter.setX(0);
     newCenter.setY(0);
-    for(sDVSEventDepacked & e:buff) { //size_t &i:subsetIndices) {
-        //sDVSEventDepacked & e = buff.at(i);
-        if(!isInROI(e,st.roi))
-            continue;
-        tmp.setX(e.x);
-        tmp.setY(e.y);
-        newCenter += tmp;
-        evCnt++;
-    }
-    newCenter /= evCnt;
-    //printf("Center: %fx%f\n",m_center.x(),m_center.y());
-
     newStd.setX(0);
     newStd.setY(0);
-    for(sDVSEventDepacked & e:buff) { //size_t &i:subsetIndices) {
-        //sDVSEventDepacked & e = buff.at(i);
+
+    // accumulate time
+    st.deltaTimeLastDataUpdate += elapsedTimeUs;
+
+
+    auto & buff = m_eventBuffer.getLockedBuffer();
+    for(sDVSEventDepacked & e:buff) {
         if(!isInROI(e,st.roi))
             continue;
-        tmp.setX(e.x);
-        tmp.setY(e.y);
-        tmp -= newCenter;
-        tmp.setX(tmp.x()*tmp.x());
-        tmp.setY(tmp.y()*tmp.y());
-        tmp.setX(sqrtf(tmp.x()));
-        tmp.setY(sqrtf(tmp.y()));
-        newStd += tmp;
+        evCnt++;
     }
-    newStd /= evCnt;
-    //printf("Std: %fx%f\n",m_std.x(),m_std.y());
-
-    // Compute velocity
-    newVelocity.setX(1000000*(st.center.x()-newCenter.x())/elapsedTimeUs);
-    newVelocity.setY(1000000*(st.center.y()-newCenter.y())/elapsedTimeUs);
-    newVelocity = 0.8*st.velocity + 0.2*newVelocity;
-
     m_eventBuffer.releaseLockedBuffer();
 
-    st.center = newCenter;
-    st.std = newStd;
-    st.evCnt = evCnt;
-    st.bbox.setX(newCenter.x()-newStd.x());
-    st.bbox.setY(newCenter.y()-newStd.y());
-    st.bbox.setWidth(2*newStd.x()-1);
-    st.bbox.setHeight(2*newStd.y()-1);
-    st.velocity = newVelocity;
-    st.velocityNorm = newVelocity/(2*newStd.y());
-    st.lastDataUpdate = m_eventBuffer.getCurrTime();
+    // Recompute position and standard deviation
+    // if there are enough events in the buffer
+    if(evCnt > MIN_EVENT_TRESHOLD) {
+        auto & buff = m_eventBuffer.getLockedBuffer();
+        for(sDVSEventDepacked & e:buff) {
+            if(!isInROI(e,st.roi))
+                continue;
+            tmp.setX(e.x);
+            tmp.setY(e.y);
+            newCenter += tmp;
+        }
+        newCenter /= evCnt;
+
+        for(sDVSEventDepacked & e:buff) {
+            if(!isInROI(e,st.roi))
+                continue;
+            tmp.setX(e.x);
+            tmp.setY(e.y);
+            tmp -= newCenter;
+            tmp.setX(tmp.x()*tmp.x());
+            tmp.setY(tmp.y()*tmp.y());
+            tmp.setX(sqrtf(tmp.x()));
+            tmp.setY(sqrtf(tmp.y()));
+            newStd += tmp;
+        }
+        newStd /= evCnt;
+        m_eventBuffer.releaseLockedBuffer();
+
+        // Compute velocity
+        newVelocity.setX(1000000*(st.center.x()-newCenter.x())/st.deltaTimeLastDataUpdate);
+        newVelocity.setY(1000000*(st.center.y()-newCenter.y())/st.deltaTimeLastDataUpdate);
+        st.deltaTimeLastDataUpdate = 0;
+        newVelocity = 0.8*st.velocity + 0.2*newVelocity;
+
+        st.center = newCenter;
+        st.std = newStd;
+        st.evCnt = evCnt;
+
+        st.velocity = newVelocity;
+        st.velocityNorm = newVelocity/(2*newStd.y());
+
+    } else {
+        // No velocity detected
+        st.std = QPointF(0,0);
+        st.evCnt = evCnt;
+        st.velocity = QPointF(0,0);
+        st.velocityNorm = QPointF(0,0);
+    }
+
+    st.bbox.setX(st.center.x()-st.std.x());
+    st.bbox.setY(st.center.y()-st.std.y());
+    st.bbox.setWidth(2*st.std.x()+1);
+    st.bbox.setHeight(2*st.std.y()+1);
 }

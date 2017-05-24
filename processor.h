@@ -54,14 +54,15 @@ public:
         QRectF roi;
         QRectF bbox;
         size_t evCnt;
-        int32_t lastROIUpdate, lastDataUpdate;
+        uint64_t lastROIUpdate, deltaTimeLastDataUpdate;
         uint32_t id;
+
         sObjectStats()
         {
             id = -1;
             evCnt = 0;
             lastROIUpdate = 0;
-            lastDataUpdate = 0;
+            deltaTimeLastDataUpdate = 0;
         }
     } sObjectStats;
 

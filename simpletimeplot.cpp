@@ -88,7 +88,7 @@ QRect SimpleTimePlot::drawFrame(QPainter *painter)
     int borderY = 20;
     QRect plotFrame(borderX,borderY,qMax(0,width()-2*borderX),qMax(0,height()-2*borderY));
     painter->setPen(QPen(Qt::red));
-    painter->drawRect(0,0,width()-1,height()-1);
+    //painter->drawRect(0,0,width()-1,height()-1);
     painter->drawRect(plotFrame);
 
     painter->setPen(QPen(Qt::black));

@@ -110,7 +110,7 @@ void CameraHandlerDavis::run()
             m_frameReciever->newFrame(frame);
         }
         continue;
-#endif
+#else
         QMutexLocker locker(&m_camLock);
         caerEventPacketContainer packetContainer = caerDeviceDataGet(m_davisHandle);
         if (packetContainer == NULL) {
@@ -148,8 +148,6 @@ void CameraHandlerDavis::run()
                     e.y = caerPolarityEventGetY(firstEvent);
                     e.pol = caerPolarityEventGetPolarity(firstEvent);
 
-                    //printf("First polarity event - ts: %d, x: %d, y: %d, pol: %d.\n", e.ts, e.x, e.y, e.pol);
-
                     if(m_frameReciever != nullptr) {
                         m_eventReciever->newEvent(e);
                     }
@@ -168,8 +166,12 @@ void CameraHandlerDavis::run()
             }
         }
         caerEventPacketContainerFree(packetContainer);
+#endif
     }
+
+#ifndef SIMULATE_CAMERA_INPUT
     caerDeviceDataStop(m_davisHandle);
+#endif
     printf("Streaming stopped.\n");
 }
 void CameraHandlerDavis::writeConfig()
@@ -181,4 +183,7 @@ void CameraHandlerDavis::writeConfig()
     // Send the default configuration before using the device.
     // No configuration is sent automatically!
     caerDeviceSendDefaultConfig(m_davisHandle);
+
+    // Enable autoexposure
+    caerDeviceConfigSet(m_davisHandle, DAVIS_CONFIG_APS, DAVIS_CONFIG_APS_AUTOEXPOSURE, true);
 }

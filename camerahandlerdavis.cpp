@@ -78,19 +78,26 @@ struct caer_davis_info CameraHandlerDavis::getInfo()
 
 void CameraHandlerDavis::run()
 {
-    printf("Streaming started.\n");
-    caerDeviceDataStart(m_davisHandle, NULL, NULL, NULL, NULL, NULL);
+#ifndef SIMULATE_CAMERA_INPUT
+    bool success = caerDeviceDataStart(m_davisHandle, NULL, NULL, NULL, NULL, NULL);
+    if(!success) {
+        printf("Failed to start data transfer!\n");
+        return;
+    }
+#endif
 
+    printf("Streaming started.\n");
     QElapsedTimer timer;
     timer.start();
 
     while (m_isStreaming) {
+#ifdef SIMULATE_CAMERA_INPUT
         ////////////
         // DEBUG CODE
         ////////////
         sDVSEventDepacked e;
         e.ts = currTs;
-        currTs += qrand() % 2;
+        currTs += qrand() % 5;
         e.x = qrand() % DAVIS_IMG_WIDHT;
         e.y = qrand() % DAVIS_IMG_HEIGHT;
         e.pol = 1;
@@ -100,13 +107,15 @@ void CameraHandlerDavis::run()
         caerFrameEvent frame;
         if(timer.elapsed()> 40) {
             timer.restart();
-            //m_frameReciever->newFrame(frame);
+            m_frameReciever->newFrame(frame);
         }
-        ////////////
+        continue;
+#endif
         QMutexLocker locker(&m_camLock);
         caerEventPacketContainer packetContainer = caerDeviceDataGet(m_davisHandle);
         if (packetContainer == NULL) {
             // Wait a bit!
+            // TODO use call back function of libscaer
             QThread::usleep(10);
             //QThread::yieldCurrentThread();
             continue; // Skip if nothing there.

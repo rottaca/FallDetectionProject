@@ -54,11 +54,14 @@ public:
         QRectF roi;
         QRectF bbox;
         size_t evCnt;
-
+        int32_t lastROIUpdate, lastDataUpdate;
+        uint32_t id;
         sObjectStats()
         {
+            id = -1;
             evCnt = 0;
-            roi = QRectF(0,0,DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT);
+            lastROIUpdate = 0;
+            lastDataUpdate = 0;
         }
     } sObjectStats;
 
@@ -74,7 +77,7 @@ public:
     }
     float getFrameFPS()
     {
-        QMutexLocker locker(&m_statsMutex);
+        QMutexLocker locker(&m_frameMutex);
         return m_currFrameFPS;
     }
 
@@ -99,8 +102,12 @@ private:
     std::queue<sDVSEventDepacked> m_eventQueue;
 
     QMutex m_frameMutex;
+    float m_currFrameFPS;
+    QElapsedTimer m_frameTimer;
     QImage m_currFrame;
     bool m_newFrameAvailable;
+    QFuture<void> m_futureAnyncPedestrianDetector;
+    u_int32_t m_nextId;
 
     // Time in us
     int m_timewindow;
@@ -109,8 +116,6 @@ private:
 
     QMutex m_statsMutex;
     QVector<sObjectStats> m_stats;
-    float m_currProcFPS,m_currFrameFPS;
-    QElapsedTimer m_frameTimer;
-
+    float m_currProcFPS;
 };
 #endif // PROCESSOR_H

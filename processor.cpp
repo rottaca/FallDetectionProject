@@ -1,10 +1,13 @@
 #include "processor.h"
 
 #include <QtConcurrent/QtConcurrent>
+#include <QImageReader>
+#include <qimage.h>
 
 #include <assert.h>
 
 #include <opencv2/opencv.hpp>
+
 
 Processor::Processor():
     m_timewindow(TIME_WINDOW_US),
@@ -13,9 +16,11 @@ Processor::Processor():
     m_eventBuffer.setup(m_timewindow);
     m_currFrame = QImage(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT,QImage::Format_RGB888);
     m_newFrameAvailable = false;
-
+    m_nextId = 0;
     sObjectStats stats;
+
     stats.roi = QRectF(0,0,DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT);
+    stats.id = m_nextId++;
     m_stats.push_back(stats);
 
     m_currProcFPS = 0;
@@ -41,21 +46,34 @@ void Processor::newEvent(const sDVSEventDepacked & event)
     {
         QMutexLocker locker(&m_queueMutex);
         m_eventQueue.push(event);
+        // TODO: Detect time jump
     }
     m_waitForData.wakeAll();
 }
 
 void Processor::newFrame(const caerFrameEvent &frame)
 {
+
+#ifdef SIMULATE_CAMERA_INPUT
+    {
+        QMutexLocker locker(&m_frameMutex);
+        m_newFrameAvailable = true;
+        QImageReader imReader("testScaled.jpeg");
+        QImage img = imReader.read();
+        m_currFrame = QImage(img.size(),QImage::Format_Grayscale8);
+        // Convert to rgb888 image
+        for(int y = 0; y < img.height(); y++)
+        {
+            uchar* ptr = m_currFrame.scanLine(y);
+            uchar* inPtr = img.scanLine(y);
+            for(int x = 0; x < img.width(); x++) {
+                ptr[x] = (inPtr[4*x+2] + inPtr[4*x+1] + inPtr[4*x])/3;
+            }
+        }
+    }
+#else
     assert(frame->lengthX == DAVIS_IMG_WIDHT);
     assert(frame->lengthY == DAVIS_IMG_HEIGHT);
-
-    if(m_frameTimer.isValid()) {
-        m_currFrameFPS = (1.0f-FPS_LOWPASS_FILTER_COEFF)*m_currFrameFPS+
-                         FPS_LOWPASS_FILTER_COEFF*(1000.0f/m_frameTimer.elapsed());
-    }
-    m_frameTimer.restart();
-
     {
         QMutexLocker locker(&m_frameMutex);
         m_newFrameAvailable = true;
@@ -68,6 +86,7 @@ void Processor::newFrame(const caerFrameEvent &frame)
             ptr[3*i + 2] = inPtr[i]>>8;
         }
     }
+#endif
     m_waitForData.wakeAll();
 }
 
@@ -75,9 +94,9 @@ void Processor::run()
 {
     printf("Processor started.\n");
     m_updateStatsTimer.start();
-    QElapsedTimer comTimer;
+    //QElapsedTimer comTimer;
     while (m_isRunning) {
-        comTimer.restart();
+        //comTimer.start();
         // New events available ?
         if(m_eventQueue.size() == 0 && m_newFrameAvailable) {
             QMutexLocker locker(&m_waitMutex);
@@ -86,20 +105,23 @@ void Processor::run()
         }
         // Process data
         else {
-            // Process events
+            // Process events and add them to the buffer
+            // Remove old ones if necessary
             if(m_eventQueue.size()>0) {
                 QMutexLocker locker(&m_queueMutex);
-                //printf("%lu\n",m_eventQueue.size());
                 m_eventBuffer.addEvents(m_eventQueue);
-                while(!m_eventQueue.empty()) {
-                    const sDVSEventDepacked &ev = m_eventQueue.front();
-                    m_eventBuffer.addEvent(ev);
-                    m_eventQueue.pop();
-                }
             }
             // Process frame
-            if(m_newFrameAvailable) {
-                processImage();
+            if(m_newFrameAvailable && m_futureAnyncPedestrianDetector.isFinished()) {
+                {
+                    QMutexLocker locker(&m_frameMutex);
+                    m_currFrameFPS = (1.0f-FPS_LOWPASS_FILTER_COEFF)*m_currFrameFPS+
+                                     FPS_LOWPASS_FILTER_COEFF*(1000.0f/m_frameTimer.elapsed());
+                    m_frameTimer.restart();
+                }
+                // Execute face detection in different thread
+                m_futureAnyncPedestrianDetector = QtConcurrent::run(this, &Processor::processImage);
+                //processImage();
             }
 
             // Recompute buffer stats
@@ -110,13 +132,14 @@ void Processor::run()
                 updateStatistics(elapsedTime);
             }
         }
-        //printf("CompTimer: %lld\n",comTimer.elapsed());
+        //printf("%lld\n",comTimer.nsecsElapsed());
     }
     printf("Processor stopped.\n");
 }
 
 void Processor::processImage()
 {
+    std::vector<cv::Rect> roi_humans;
     {
         QMutexLocker locker(&m_frameMutex);
         m_newFrameAvailable = false;
@@ -124,10 +147,12 @@ void Processor::processImage()
         cv::HOGDescriptor hog;
         hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
 
-        cv::Mat image(cv::Size(DAVIS_IMG_WIDHT, DAVIS_IMG_HEIGHT), CV_8UC3, m_currFrame.bits(), cv::Mat::AUTO_STEP);
+        cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
+                      CV_8UC1, m_currFrame.bits(), m_currFrame.bytesPerLine());
 
-        std::vector<cv::Rect> found, found_filtered;
-        hog.detectMultiScale(image, found, 0, cv::Size(8,8), cv::Size(32,32), 1.05, 2);
+        //cv::imwrite( "Image.jpg", gray_image );
+        std::vector<cv::Rect> found;
+        hog.detectMultiScale(image, found);
 
         size_t i, j;
         for (i=0; i<found.size(); i++) {
@@ -135,14 +160,100 @@ void Processor::processImage()
             for (j=0; j<found.size(); j++)
                 if (j!=i && (r & found[j])==r)
                     break;
-            if (j==found.size())
-                found_filtered.push_back(r);
+            if (j==found.size()) {
+                roi_humans.push_back(r);
+            }
         }
     }
 
     {
-        // TODO Map rects to statistics roi
-        QMutexLocker locker(&m_statsMutex);
+        //printf("Humans: %zu\n",roi_humans.size());
+        if(roi_humans.size() > 0) {
+            QMutexLocker locker(&m_statsMutex);
+            QVector<sObjectStats> oldStats = m_stats;
+            m_stats.clear();
+
+            std::vector<int> foundRects;
+            for(int i = 0; i < oldStats.size(); i++) {
+                sObjectStats o = oldStats.at(i);
+                float oXR = o.roi.x()+o.roi.width();
+                float oXL = o.roi.x();
+                float oYT = o.roi.y();
+                float oYB = o.roi.y()+o.roi.height();
+                float sz = o.roi.width()*o.roi.height();
+
+                //printf("O: %f %f %f %f\n",oXL,oYT,o.roi.width(),o.roi.height());
+
+                float currScore = 0;
+                int idx = -1;
+
+                // Search for matching new rectangle
+                for(int j=0; j < roi_humans.size(); j++) {
+                    bool alreadyFound = false;
+                    for(int k: foundRects)
+                        if(k==j) {
+                            alreadyFound=true;
+                            break;
+                        }
+                    if(alreadyFound)
+                        continue;
+                    const cv::Rect& r = roi_humans.at(j);
+
+                    float rXR = r.x+r.width;
+                    float rXL = r.x;
+                    float rYT = r.y;
+                    float rYB = r.y+r.height;
+
+                    //printf("ROI: %d %d %d %d\n",r.x,r.y,r.width,r.height);
+
+                    float dx = qMin(rXR,oXR)-qMax(rXL,oXL);
+                    float dy = qMin(rYB,oYB)-qMax(rYT,oYT);
+
+                    float score = qMax(0.f,dx)*
+                                  qMax(0.f,dy)/(sz);
+
+                    //printf("Score: %f\n",score);
+                    //printf("%f %f %f %f\n",qMin(rXR,oXR),qMax(rXL,oXL),
+                    //       qMax(rYT,oYT),qMin(rYB,oYB));
+                    //printf("%f %f\n",dx,dy);
+
+                    if(score > currScore) {
+                        currScore = score;
+                        idx = j;
+                    }
+                }
+                // Close enough ?
+                float minScore = 0.8;
+                if(currScore > minScore) {
+                    const cv::Rect& r = roi_humans.at(idx);
+                    o.roi = QRectF(r.x,r.y,r.width,r.height);
+                    o.lastROIUpdate = m_eventBuffer.getCurrTime();
+                    m_stats.push_back(o);
+                    foundRects.push_back(idx);
+                }
+            }
+            //printf("Tracked: %zu\n",foundRects.size());
+            // Add all missing rois
+            for(int i = 0; i < roi_humans.size(); i++) {
+                bool alreadyFound = false;
+                for(int k: foundRects)
+                    if(k==i) {
+                        alreadyFound=true;
+                        break;
+                    }
+                if(alreadyFound)
+                    continue;
+
+                const cv::Rect& r = roi_humans.at(i);
+                sObjectStats stats;
+                stats.id = m_nextId++;
+                stats.roi = QRectF(r.x,r.y,r.width,r.height);
+                stats.lastROIUpdate = m_eventBuffer.getCurrTime();
+                m_stats.push_back(stats);
+
+            }
+            //printf("New: %zu\n",roi_humans.size()-foundRects.size());
+        }
     }
 }
 
@@ -173,7 +284,7 @@ void Processor::updateObjectStats(sObjectStats &st,uint32_t elapsedTimeUs)
             subsetIndices.push_back(i);
         }
     }*/
-    //printf("SubsetSize: %zu\n",subsetIndices.size());
+    //printf("ProcBufferSz: %zu\n",buff.size());
 
     QPointF tmp, newCenter, newStd, newVelocity;
     size_t evCnt = 0;
@@ -225,4 +336,5 @@ void Processor::updateObjectStats(sObjectStats &st,uint32_t elapsedTimeUs)
     st.bbox.setHeight(2*newStd.y()-1);
     st.velocity = newVelocity;
     st.velocityNorm = newVelocity/(2*newStd.y());
+    st.lastDataUpdate = m_eventBuffer.getCurrTime();
 }

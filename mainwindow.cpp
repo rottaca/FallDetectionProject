@@ -8,7 +8,8 @@
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::MainWindow)
+    ui(new Ui::MainWindow),
+    m_uiRedrawFPS(0)
 {
     ui->setupUi(this);
     plotEventsInWindow = new SimpleTimePlot(this);
@@ -53,15 +54,22 @@ void MainWindow::closeEvent (QCloseEvent *event)
 
 void MainWindow::redrawUI()
 {
+    uint32_t elapsedTime = m_realRedrawTimer.nsecsElapsed()/1000;
+    m_realRedrawTimer.restart();
+    m_uiRedrawFPS = m_uiRedrawFPS*(1-FPS_LOWPASS_FILTER_COEFF) +
+                    FPS_LOWPASS_FILTER_COEFF*1000000.0f/elapsedTime;
+
     EventBuffer & buff = proc.getBuffer();
-    Processor::sObjectStats stats = proc.getStats().at(0);
-
-    int time = buff.getCurrTime();
-    int evCnt = stats.evCnt;
-    plotEventsInWindow->addPoint(time,evCnt);
-    plotVerticalCentroid->addPoint(time,DAVIS_IMG_HEIGHT-1-stats.center.y());
-    plotSpeed->addPoint(time,stats.velocity.y()/stats.std.y());
-
+    QVector<Processor::sObjectStats> statsList = proc.getStats();
+    if(statsList.size() > 0) {
+        Processor::sObjectStats stats = statsList.at(0);
+        int time = buff.getCurrTime();
+        int evCnt = stats.evCnt;
+        plotEventsInWindow->addPoint(time,evCnt);
+        plotVerticalCentroid->addPoint(time,DAVIS_IMG_HEIGHT-1-stats.center.y());
+        plotSpeed->addPoint(time,stats.velocity.y()/stats.std.y());
+        ui->label_2->setText(QString("Events: %1 GUI FPS: %2").arg(evCnt).arg(m_uiRedrawFPS,0,'g',3));
+    }
     plotEventsInWindow->update();
     plotVerticalCentroid->update();
     plotSpeed->update();
@@ -72,14 +80,20 @@ void MainWindow::redrawUI()
     QImage img = buff.toImage();
     QPixmap pix = QPixmap::fromImage(img);
     QPainter painter(&pix);
-    for(Processor::sObjectStats stats: proc.getStats()) {
+    for(Processor::sObjectStats stats: statsList) {
         painter.setPen(penRed);
         painter.drawRect(stats.bbox);
         painter.setPen(penBlue);
         painter.drawRect(stats.roi);
         painter.setPen(penGreen);
         painter.drawPoint(stats.center);
+        painter.setPen(penRed);
+        painter.drawText(stats.roi.x(),stats.roi.y()+painter.fontMetrics().height(),
+                         QString("%1").arg(stats.id));
     }
+    painter.setPen(penRed);
+    painter.drawText(5,painter.fontMetrics().height(),
+                     QString("%1 FPS").arg((double)proc.getProcessingFPS(),0,'g',3));
     painter.end();
     ui->label->setPixmap(pix);
 
@@ -89,8 +103,12 @@ void MainWindow::redrawUI()
     painter2.setPen(penRed);
     painter2.drawText(5,painter2.fontMetrics().height(),
                       QString("%1 FPS").arg((double)proc.getFrameFPS(),0,'g',3));
+
+    for(Processor::sObjectStats stats: statsList) {
+        painter2.setPen(penGreen);
+        painter2.drawRect(stats.roi);
+    }
     painter2.end();
     ui->label_3->setPixmap(pix);
-    ui->label_2->setText(QString("Events: %1\nProc FPS: %2").arg(evCnt).arg(proc.getProcessingFPS()));
 
 }

@@ -5,6 +5,7 @@
 #include <QString>
 #include <QCloseEvent>
 #include <QTimer>
+#include <QElapsedTimer>
 
 #include "simpletimeplot.h"
 
@@ -34,7 +35,8 @@ private:
     QTimer* timer;
     CameraHandlerDavis camHandler;
     Processor proc;
-
+    float m_uiRedrawFPS;
+    QElapsedTimer m_realRedrawTimer;
     SimpleTimePlot *plotEventsInWindow;
     SimpleTimePlot *plotVerticalCentroid;
     SimpleTimePlot *plotSpeed;

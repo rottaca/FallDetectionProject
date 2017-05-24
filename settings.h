@@ -6,7 +6,7 @@
 
 // Time settings
 // Time window in microseconds
-#define TIME_WINDOW_US 30000
+#define TIME_WINDOW_US 100000
 // Update intervals for user interface and computations
 #define UPDATE_INTERVAL_COMP_US 5000
 #define UPDATE_INTERVAL_UI_US 50000
@@ -15,5 +15,8 @@
 
 
 #define FPS_LOWPASS_FILTER_COEFF 0.1
+
+// Uncomment to simulate event and camera data
+#define SIMULATE_CAMERA_INPUT
 
 #endif // SETTINGS_H

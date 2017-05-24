@@ -30,20 +30,31 @@ void EventBuffer::addEvents(std::queue<sDVSEventDepacked> & events)
 {
     if(events.size() == 0)
         return;
-    QMutexLocker locker(&m_lock);
 
     uint32_t newTsStart = events.back().ts;
+
+    // Add events
+    //int lastTS = events.front().ts;
+    while(!events.empty()) {
+        const sDVSEventDepacked &ev = events.front();
+        // Don't block for the whole function or other threads are slowed down
+        {
+            QMutexLocker locker(&m_lock);
+            m_buffer.push_front(ev);
+        }
+        //if(lastTS > events.front().ts)
+        // printf("Jump: %d to %d\n", lastTS,events.front().ts);
+        //lastTS = events.front().ts;
+        events.pop();
+    }
+
     // Remove all old events
+    // Here, we have to lock for the whole period
+    QMutexLocker locker(&m_lock);
     while (m_buffer.size() > 0 &&
             newTsStart - m_buffer.back().ts > m_timeWindow) {
         m_buffer.pop_back();
     }
-    // Add events
-    while(!events.empty()) {
-        m_buffer.push_front(events.front());
-        events.pop();
-    }
-
     //printf("Buff: %zu\n",m_buffer.size());
 }
 
@@ -51,8 +62,8 @@ QImage EventBuffer::toImage()
 {
     QImage img(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT,QImage::Format_RGB888);
 
-    QMutexLocker locker(&m_lock);
     img.fill(Qt::white);
+    QMutexLocker locker(&m_lock);
     // Get current time and color according to temporal distance
     uint32_t currTime = m_buffer.front().ts;
 

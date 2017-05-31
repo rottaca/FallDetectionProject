@@ -68,7 +68,7 @@ void MainWindow::redrawUI()
         plotVerticalCentroid->addPoint(time,DAVIS_IMG_HEIGHT-1-stats.center.y());
         plotSpeed->addPoint(time,stats.velocityNorm.y());
         int evCnt = buff.getSize();
-        ui->label_2->setText(QString("Events: %1 GUI FPS: %2").arg(evCnt).arg(m_uiRedrawFPS,0,'g',3));
+        ui->l_status->setText(QString("Events: %1 GUI FPS: %2").arg(evCnt).arg(m_uiRedrawFPS,0,'g',3));
     }
     plotEventsInWindow->update();
     plotVerticalCentroid->update();
@@ -98,7 +98,7 @@ void MainWindow::redrawUI()
     painter.drawText(5,painter.fontMetrics().height(),
                      QString("%1 FPS").arg((double)proc.getProcessingFPS(),0,'g',3));
     painter.end();
-    ui->label->setPixmap(pix);
+    ui->l_events->setPixmap(pix);
 
     img = proc.getImg();
     pix = QPixmap::fromImage(img);
@@ -112,6 +112,6 @@ void MainWindow::redrawUI()
         painter2.drawRect(stats.roi);
     }
     painter2.end();
-    ui->label_3->setPixmap(pix);
+    ui->l_gray->setPixmap(pix);
 
 }

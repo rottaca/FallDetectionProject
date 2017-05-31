@@ -26,6 +26,9 @@ LIBS += -lcaer
 #INCLUDEPATH += /usr/include
 LIBS += `pkg-config --libs opencv`
 
+QMAKE_CXXFLAGS += -fopenmp
+LIBS += -fopenmp
+
 SOURCES += main.cpp\
         mainwindow.cpp \
     eventbuffer.cpp \

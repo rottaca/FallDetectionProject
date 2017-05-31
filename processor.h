@@ -8,6 +8,8 @@
 #include <QElapsedTimer>
 #include <QImage>
 
+#include <opencv2/opencv.hpp>
+
 #include <atomic>
 #include <queue>
 
@@ -49,6 +51,7 @@ public:
     typedef struct sObjectStats {
         QPointF center;
         QPointF velocity;
+        std::vector<QPointF> velocityHistory;
         QPointF velocityNorm;
         QPointF std;
         QRectF roi;
@@ -90,6 +93,9 @@ private:
     void updateStatistics(uint32_t elapsedTimeUs);
     void updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs);
     inline bool isInROI(const sDVSEventDepacked& e, const QRectF &roi);
+
+    std::vector<cv::Rect> detect();
+    void tracking(const std::vector<cv::Rect> &bboxes);
 
 private:
     std::atomic_bool m_isRunning;

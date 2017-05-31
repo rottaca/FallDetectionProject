@@ -89,7 +89,8 @@ void CameraHandlerDavis::run()
     printf("Streaming started.\n");
     QElapsedTimer timer;
     timer.start();
-
+    int lastX = DAVIS_IMG_WIDHT/2, lastY = DAVIS_IMG_HEIGHT/2;
+    int dirY = 1;
     while (m_isStreaming) {
 #ifdef SIMULATE_CAMERA_INPUT
         ////////////
@@ -98,8 +99,12 @@ void CameraHandlerDavis::run()
         sDVSEventDepacked e;
         e.ts = currTs;
         currTs += qrand() % 5;
-        e.x = qrand() % DAVIS_IMG_WIDHT;
-        e.y = qrand() % DAVIS_IMG_HEIGHT;
+        e.x = ((int)lastX + qrand() % 50) % DAVIS_IMG_WIDHT;
+        if(qrand()%2== 0)
+            e.y = ((int)lastY +  qrand() % 40) % DAVIS_IMG_HEIGHT;
+        else
+            e.y = ((int)lastY + 50 +  qrand() % 40) % DAVIS_IMG_HEIGHT;
+
         e.pol = 1;
         if(m_frameReciever != nullptr) {
             m_eventReciever->newEvent(e);
@@ -108,6 +113,13 @@ void CameraHandlerDavis::run()
         if(timer.elapsed()> 40) {
             timer.restart();
             m_frameReciever->newFrame(frame);
+            lastX = (lastX + 1) % DAVIS_IMG_WIDHT;
+            lastY = (lastY + dirY) % DAVIS_IMG_HEIGHT;
+            if(lastY < 0) {
+                lastY = DAVIS_IMG_HEIGHT+lastY;
+            }
+            if(lastY < 40 || lastY > 150)
+                dirY *= -1;
         }
         continue;
 #else

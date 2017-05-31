@@ -64,6 +64,8 @@ protected:
     // deque provides fast insert and delete operataions.
     std::deque<sDVSEventDepacked> m_buffer;
 
+    // TODO Add Kd-Tree for bounding box - search
+
     uint32_t m_timeWindow;
 
     QMutex m_lock;

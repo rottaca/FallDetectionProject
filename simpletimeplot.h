@@ -20,7 +20,7 @@ public:
 
     void addPoint(double x, double y)
     {
-        if(!ValidDouble(x) || !ValidDouble(y))
+        if(!ValidDouble(x))
             return;
         QMutexLocker locker(&m_dataMutex);
         m_data.insert(std::make_pair(x,y));

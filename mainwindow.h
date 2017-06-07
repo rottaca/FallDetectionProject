@@ -12,6 +12,8 @@
 #include "camerahandlerdavis.h"
 #include "processor.h"
 
+#include "aspectratiopixmap.h"
+
 namespace Ui
 {
 class MainWindow;
@@ -40,6 +42,7 @@ private:
     SimpleTimePlot *plotEventsInWindow;
     SimpleTimePlot *plotVerticalCentroid;
     SimpleTimePlot *plotSpeed;
+    AspectRatioPixmap * imgFalls[TRACK_BIGGEST_N_BOXES];
 };
 
 #endif // MAINWINDOW_H

@@ -7,6 +7,7 @@
 
 CameraHandlerDavis::CameraHandlerDavis()
     :m_davisHandle(NULL),
+     m_playbackHandle(NULL),
      m_isStreaming(false),
      m_isConnected(false),
      m_eventReciever(nullptr),
@@ -16,8 +17,6 @@ CameraHandlerDavis::CameraHandlerDavis()
 }
 CameraHandlerDavis::~CameraHandlerDavis()
 {
-    if(m_isStreaming)
-        stopStreaming();
     if(m_isConnected)
         disconnect();
     QMutexLocker locker(&m_camLock);
@@ -30,16 +29,34 @@ void CameraHandlerDavis::disconnect()
 
     m_isConnected = false;
     QMutexLocker locker(&m_camLock);
-    caerDeviceClose(&m_davisHandle);
+    if(m_davisHandle != NULL) {
+        caerDeviceClose(&m_davisHandle);
+        m_davisHandle = NULL;
+    } else if(m_playbackHandle) {
+        playbackClose(m_playbackHandle);
+        m_playbackHandle = NULL;
+    }
+}
+bool CameraHandlerDavis::connect(QString file)
+{
+    if(m_isConnected)
+        disconnect();
+
+    m_playbackHandle = playbackOpen(file.toStdString().c_str());
+
+    if(m_playbackHandle == NULL) {
+        printf("Can't open file for playback!\n");
+        return false;
+    } else {
+        return true;
+    }
 }
 
 bool CameraHandlerDavis::connect(int devId)
 {
-    if(m_isStreaming)
-        stopStreaming();
     if(m_isConnected)
         disconnect();
-    m_davisHandle = caerDeviceOpen(devId, CAER_DEVICE_DAVIS_FX2, 0, 0, NULL);
+    m_davisHandle = caerDeviceOpen(devId, CAER_DEVICE_DAVIS, 0, 0, NULL);
 
     if(m_davisHandle == NULL) {
         printf("Can't connect to device!\n");
@@ -78,53 +95,29 @@ struct caer_davis_info CameraHandlerDavis::getInfo()
 
 void CameraHandlerDavis::run()
 {
-#ifndef SIMULATE_CAMERA_INPUT
-    bool success = caerDeviceDataStart(m_davisHandle, NULL, NULL, NULL, NULL, NULL);
-    if(!success) {
-        printf("Failed to start data transfer!\n");
-        return;
-    }
-#endif
+    if(m_davisHandle != NULL) {
+        bool success = caerDeviceDataStart(m_davisHandle, NULL, NULL, NULL, NULL, NULL);
+        if(!success) {
+            printf("Failed to start data transfer!\n");
+            return;
+        }
 
+        // Let's turn on blocking data-get mode to avoid wasting resources.
+        caerDeviceConfigSet(m_davisHandle, CAER_HOST_CONFIG_DATAEXCHANGE, CAER_HOST_CONFIG_DATAEXCHANGE_BLOCKING, true);
+    } else if(m_playbackHandle != NULL) {
+        playbackDataStart(m_playbackHandle);
+    }
     printf("Streaming started.\n");
     QElapsedTimer timer;
     timer.start();
-    int lastX = DAVIS_IMG_WIDHT/2, lastY = DAVIS_IMG_HEIGHT/2;
-    int dirY = 1;
     while (m_isStreaming) {
-#ifdef SIMULATE_CAMERA_INPUT
-        ////////////
-        // DEBUG CODE
-        ////////////
-        sDVSEventDepacked e;
-        e.ts = currTs;
-        currTs += qrand() % 5;
-        e.x = ((int)lastX + qrand() % 50) % DAVIS_IMG_WIDHT;
-        if(qrand()%2== 0)
-            e.y = ((int)lastY +  qrand() % 40) % DAVIS_IMG_HEIGHT;
-        else
-            e.y = ((int)lastY + 50 +  qrand() % 40) % DAVIS_IMG_HEIGHT;
-
-        e.pol = 1;
-        if(m_frameReciever != nullptr) {
-            m_eventReciever->newEvent(e);
-        }
-        caerFrameEvent frame;
-        if(timer.elapsed()> 40) {
-            timer.restart();
-            m_frameReciever->newFrame(frame);
-            lastX = (lastX + 1) % DAVIS_IMG_WIDHT;
-            lastY = (lastY + dirY) % DAVIS_IMG_HEIGHT;
-            if(lastY < 0) {
-                lastY = DAVIS_IMG_HEIGHT+lastY;
-            }
-            if(lastY < 40 || lastY > 150)
-                dirY *= -1;
-        }
-        continue;
-#else
         QMutexLocker locker(&m_camLock);
-        caerEventPacketContainer packetContainer = caerDeviceDataGet(m_davisHandle);
+        caerEventPacketContainer packetContainer = NULL;
+        if(m_davisHandle != NULL)
+            packetContainer = caerDeviceDataGet(m_davisHandle);
+        else if(m_playbackHandle != NULL)
+            packetContainer = playbackDataGet(m_playbackHandle);
+
         if (packetContainer == NULL) {
             // Wait a bit!
             // TODO use call back function of libscaer
@@ -178,12 +171,14 @@ void CameraHandlerDavis::run()
             }
         }
         caerEventPacketContainerFree(packetContainer);
-#endif
     }
 
-#ifndef SIMULATE_CAMERA_INPUT
-    caerDeviceDataStop(m_davisHandle);
-#endif
+    if(m_davisHandle != NULL) {
+        caerDeviceDataStop(m_davisHandle);
+    } else if(m_playbackHandle != NULL) {
+        playbackDataStop(m_playbackHandle);
+    }
+
     printf("Streaming stopped.\n");
 }
 void CameraHandlerDavis::writeConfig()
@@ -198,4 +193,25 @@ void CameraHandlerDavis::writeConfig()
 
     // Enable autoexposure
     caerDeviceConfigSet(m_davisHandle, DAVIS_CONFIG_APS, DAVIS_CONFIG_APS_AUTOEXPOSURE, true);
+
+    // Tweak some biases, to increase bandwidth in this case.
+//    struct caer_bias_coarsefine coarseFineBias;
+
+//    coarseFineBias.coarseValue = 2;
+//    coarseFineBias.fineValue = 116;
+//    coarseFineBias.enabled = true;
+//    coarseFineBias.sexN = false;
+//    coarseFineBias.typeNormal = true;
+//    coarseFineBias.currentLevelNormal = true;
+//    caerDeviceConfigSet(m_davisHandle, DAVIS_CONFIG_BIAS, DAVIS240_CONFIG_BIAS_PRBP,
+//                        caerBiasCoarseFineGenerate(coarseFineBias));
+
+//    coarseFineBias.coarseValue = 1;
+//    coarseFineBias.fineValue = 33;
+//    coarseFineBias.enabled = true;
+//    coarseFineBias.sexN = false;
+//    coarseFineBias.typeNormal = true;
+//    coarseFineBias.currentLevelNormal = true;
+//    caerDeviceConfigSet(m_davisHandle, DAVIS_CONFIG_BIAS, DAVIS240_CONFIG_BIAS_PRSFBP,
+//                        caerBiasCoarseFineGenerate(coarseFineBias));
 }

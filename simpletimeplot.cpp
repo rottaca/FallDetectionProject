@@ -41,13 +41,16 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
             // Clipping with reentering line
             if(isOutside) {
                 lastPoint.setX(qMax(plotFrame.x(),qMin(plotFrameLowRight.x(),lastPoint.x())));
-                lastPoint.setY(qMax(plotFrame.y(),qMin(plotFrameLowRight.y(),lastPoint.y())));
+                if(!isnanf(lastPoint.y()))
+                    lastPoint.setY(qMax(plotFrame.y(),qMin(plotFrameLowRight.y(),lastPoint.y())));
+                else
+                    lastPoint.setY(y);
                 isOutside = false;
             }
             newPoint.setX(x);
             newPoint.setY(y);
 
-            if(skippedFirst)
+            if(skippedFirst && !isnanf(newPoint.y()) && !isnanf(lastPoint.y()))
                 lines.append(QLineF(lastPoint,newPoint));
             skippedFirst = true;
 
@@ -56,10 +59,13 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
         else if(!isOutside) {
             // Clip leaving line
             newPoint.setX(qMax(plotFrame.x(),qMin(plotFrameLowRight.x(),x)));
-            newPoint.setY(qMax(plotFrame.y(),qMin(plotFrameLowRight.y(),y)));
+            if(!isnanf(y))
+                newPoint.setY(qMax(plotFrame.y(),qMin(plotFrameLowRight.y(),y)));
+            else
+                newPoint.setY(y);
             isOutside = true;
 
-            if(skippedFirst)
+            if(skippedFirst && !isnanf(newPoint.y()) && !isnanf(lastPoint.y()))
                 lines.append(QLineF(lastPoint,newPoint));
             skippedFirst = true;
         } // Store point for next run only
@@ -75,11 +81,13 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
 
     // Print value next to line end
     QFontMetrics fm = painter.fontMetrics();
-    QString val = QString("%1").arg(m_data.rbegin()->second);
-    x = lastPoint.x()-fm.width(val)-1;
-    // Keep y in range of plot
-    y = qMin(plotFrame.y()+plotFrame.height(),qMax(plotFrame.y()+fm.height(),lastPoint.y()-5));
-    painter.drawText(x,y,val);
+    if(!isnanf(m_data.rbegin()->second)) {
+        QString val = QString("%1").arg(m_data.rbegin()->second);
+        x = lastPoint.x()-fm.width(val)-1;
+        // Keep y in range of plot
+        y = qMin(plotFrame.y()+plotFrame.height(),qMax(plotFrame.y()+fm.height(),lastPoint.y()-5));
+        painter.drawText(x,y,val);
+    }
 
 }
 QRect SimpleTimePlot::drawFrame(QPainter *painter)

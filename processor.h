@@ -55,17 +55,24 @@ public:
         QPointF velocityNorm;
         QPointF std;
         QRectF roi;
-        QRectF bbox;
+        QRectF stdDevBox;
         size_t evCnt;
-        uint64_t lastROIUpdate, deltaTimeLastDataUpdate;
+        uint64_t lastROIUpdate, deltaTimeLastDataUpdateUs;
         uint32_t id;
-
+        bool trackingLost;
+        bool skippedLastUpdate;
+        bool possibleFall;
+        bool centerInitiallyComputed;
         sObjectStats()
         {
+            possibleFall = false;
+            skippedLastUpdate = false;
+            trackingLost = false;
+            centerInitiallyComputed = false;
             id = -1;
             evCnt = 0;
             lastROIUpdate = 0;
-            deltaTimeLastDataUpdate = 0;
+            deltaTimeLastDataUpdateUs = 0;
         }
     } sObjectStats;
 
@@ -74,6 +81,12 @@ public:
         QMutexLocker locker(&m_statsMutex);
         return m_stats;
     }
+    QImage getThresholdImg()
+    {
+        QMutexLocker locker(&m_statsMutex);
+        return m_thresholdImg;
+    }
+
     float getProcessingFPS()
     {
         QMutexLocker locker(&m_statsMutex);
@@ -95,7 +108,7 @@ private:
     inline bool isInROI(const sDVSEventDepacked& e, const QRectF &roi);
 
     std::vector<cv::Rect> detect();
-    void tracking(const std::vector<cv::Rect> &bboxes);
+    void tracking(std::vector<cv::Rect> &bboxes);
 
 private:
     std::atomic_bool m_isRunning;
@@ -124,5 +137,6 @@ private:
     QMutex m_statsMutex;
     QVector<sObjectStats> m_stats;
     float m_currProcFPS;
+    QImage m_thresholdImg;
 };
 #endif // PROCESSOR_H

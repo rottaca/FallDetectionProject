@@ -47,12 +47,25 @@
             </property>
            </widget>
           </item>
+          <item row="0" column="2">
+           <widget class="AspectRatioPixmap" name="l_threshold">
+            <property name="text">
+             <string>TextLabel</string>
+            </property>
+            <property name="scaledContents">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
         <item>
          <spacer name="horizontalSpacer">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Expanding</enum>
           </property>
           <property name="sizeHint" stdset="0">
            <size>
@@ -75,23 +88,23 @@
         <property name="formAlignment">
          <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
         </property>
-        <item row="0" column="0">
-         <widget class="QPushButton" name="pushButton">
+        <item row="0" column="0" colspan="2">
+         <widget class="QCheckBox" name="cb_showLostTracking">
           <property name="text">
-           <string>PushButton</string>
+           <string>Show Lost Tracking</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
-         <widget class="QPushButton" name="pushButton_2">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
+        <item row="2" column="0" colspan="2">
+         <layout class="QVBoxLayout" name="lay_foundFallsBoxes"/>
+        </item>
+        <item row="1" column="0" colspan="2">
+         <widget class="QLabel" name="label">
           <property name="text">
-           <string>PushButton</string>
+           <string>Biggest falling objects</string>
           </property>
          </widget>
         </item>

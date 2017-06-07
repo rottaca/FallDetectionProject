@@ -9,6 +9,7 @@
 #include <QFuture>
 
 #include <libcaer/devices/davis.h>
+#include <libcaer/devices/playback.h>
 
 #include "datatypes.h"
 
@@ -17,6 +18,8 @@ class CameraHandlerDavis
 public:
     CameraHandlerDavis();
     ~CameraHandlerDavis();
+
+    bool connect(QString file);
     bool connect(int devId = 1);
     void disconnect();
     void startStreaming();
@@ -49,6 +52,7 @@ public:
 
 protected:
     caerDeviceHandle m_davisHandle;
+    playbackHandle m_playbackHandle;
     std::atomic_bool m_isStreaming;
     std::atomic_bool m_isConnected;
     QMutex m_camLock;

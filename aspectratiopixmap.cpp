@@ -26,7 +26,10 @@ QSize AspectRatioPixmap::sizeHint() const
 
 QPixmap AspectRatioPixmap::scaledPixmap() const
 {
-    return pix.scaled(this->size(), Qt::KeepAspectRatio, Qt::FastTransformation);
+    if(!pix.isNull())
+        return pix.scaled(this->size(), Qt::KeepAspectRatio, Qt::FastTransformation);
+    else
+        return pix;
 }
 
 void AspectRatioPixmap::resizeEvent(QResizeEvent * e)

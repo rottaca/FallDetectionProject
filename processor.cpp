@@ -12,14 +12,16 @@ Processor::Processor():
     m_updateStatsInterval(UPDATE_INTERVAL_COMP_US)
 {
     m_eventBuffer.setup(m_timewindow);
-    m_currFrame = QImage(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT,QImage::Format_RGB888);
+    m_currFrame = QImage(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT,QImage::Format_Grayscale8);
     m_newFrameAvailable = false;
     m_nextId = 0;
-    sObjectStats stats;
 
+#ifdef ASSUME_SINGLE_PERSON
+    sObjectStats stats;
     stats.roi = QRectF(0,0,DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT);
     stats.id = m_nextId++;
     m_stats.push_back(stats);
+#endif
 
     m_currProcFPS = 0;
     m_currFrameFPS = 0;
@@ -79,9 +81,7 @@ void Processor::newFrame(const caerFrameEvent &frame)
         uchar* ptr = m_currFrame.bits();
         u_int16_t* inPtr = frame->pixels;
         for(int i = 0; i < DAVIS_IMG_WIDHT*DAVIS_IMG_HEIGHT; i++) {
-            ptr[3*i] = inPtr[i]>>8;
-            ptr[3*i + 1] = inPtr[i]>>8;
-            ptr[3*i + 2] = inPtr[i]>>8;
+            ptr[i] = inPtr[i]>>8;
         }
     }
 #endif
@@ -149,7 +149,6 @@ void Processor::processImage()
         cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
                       CV_8UC1, m_currFrame.bits(), m_currFrame.bytesPerLine());
 
-        //cv::imwrite( "Image.jpg", gray_image );
         std::vector<cv::Rect> found;
         hog.detectMultiScale(image, found,0,cv::Size(6,6),cv::Size(32,64),1.2);
 
@@ -163,111 +162,109 @@ void Processor::processImage()
                 roi_humans.push_back(r);
             }
         }
-//        roi_humans.clear();
-    }
-
-    {
-        //printf("Humans: %zu\n",roi_humans.size());
-
     }
 }
 
-void Processor::tracking(const std::vector<cv::Rect> &bboxes)
+void Processor::tracking(std::vector<cv::Rect> &bboxes)
 {
-    if(bboxes.size() > 0) {
-        QMutexLocker locker(&m_statsMutex);
-        QVector<sObjectStats> oldStats = m_stats;
-        m_stats.clear();
+    QVector<sObjectStats> oldStats = m_stats;
+    m_stats.clear();
 
-        std::vector<int> foundRects;
-        for(int i = 0; i < oldStats.size(); i++) {
-            sObjectStats o = oldStats.at(i);
-            float oXR = o.roi.x()+o.roi.width();
-            float oXL = o.roi.x();
-            float oYT = o.roi.y();
-            float oYB = o.roi.y()+o.roi.height();
-            float sz = o.roi.width()*o.roi.height();
 
-            //printf("O: %f %f %f %f\n",oXL,oYT,o.roi.width(),o.roi.height());
+    /*  if(bboxes.size() == 0) {
+          cv::Rect r;
+          r.x = 0;
+          r.y = 0;
+          r.width = DAVIS_IMG_WIDHT;
+          r.height = DAVIS_IMG_HEIGHT;
+          bboxes.push_back(r);
+      }*/
 
-            float currScore = 0;
-            int idx = -1;
+    std::vector<int> trackedRects;
+    for(int i = 0; i < oldStats.size(); i++) {
+        sObjectStats o = oldStats.at(i);
+        float oXR = o.roi.x()+o.roi.width();
+        float oXL = o.roi.x();
+        float oYT = o.roi.y();
+        float oYB = o.roi.y()+o.roi.height();
+        float sz = o.roi.width()*o.roi.height();
+        float currScore = 0;
+        int idx = -1;
 
-            // Search for matching new rectangle
-            for(int j=0; j < bboxes.size(); j++) {
-                bool alreadyFound = false;
-                for(int k: foundRects)
-                    if(k==j) {
-                        alreadyFound=true;
-                        break;
-                    }
-                if(alreadyFound)
-                    continue;
-                const cv::Rect& r = bboxes.at(j);
-
-                float rXR = r.x+r.width;
-                float rXL = r.x;
-                float rYT = r.y;
-                float rYB = r.y+r.height;
-
-                //printf("ROI: %d %d %d %d\n",r.x,r.y,r.width,r.height);
-
-                float dx = qMin(rXR,oXR)-qMax(rXL,oXL);
-                float dy = qMin(rYB,oYB)-qMax(rYT,oYT);
-
-                float score = qMax(0.f,dx)*
-                              qMax(0.f,dy)/(sz);
-
-                //printf("Score: %f\n",score);
-                //printf("%f %f %f %f\n",qMin(rXR,oXR),qMax(rXL,oXL),
-                //       qMax(rYT,oYT),qMin(rYB,oYB));
-                //printf("%f %f\n",dx,dy);
-
-                if(score > currScore) {
-                    currScore = score;
-                    idx = j;
-                }
-            }
-            // Close enough ?
-            if(currScore > TRACK_OVERLAP_RATIO) {
-                const cv::Rect& r = bboxes.at(idx);
-                o.roi = QRectF(r.x,r.y,r.width,r.height);
-                o.lastROIUpdate = m_eventBuffer.getCurrTime();
-                m_stats.push_back(o);
-                foundRects.push_back(idx);
-            }
-            // ROI not found but still really new ?
-            else if(m_eventBuffer.getCurrTime()-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_US) {
-                m_stats.push_back(o);
-                foundRects.push_back(idx);
-            }
-        }
-        //printf("Tracked: %zu\n",foundRects.size());
-        // Add all missing rois
-        for(int i = 0; i < bboxes.size(); i++) {
-            bool alreadyFound = false;
-            for(int k: foundRects)
-                if(k==i) {
-                    alreadyFound=true;
+        // Search for matching new rectangle
+        for(int j=0; j < bboxes.size(); j++) {
+            bool alreadyTracked = false;
+            for(int k: trackedRects)
+                if(k==j) {
+                    alreadyTracked=true;
                     break;
                 }
-            if(alreadyFound)
+            if(alreadyTracked)
                 continue;
+            const cv::Rect& r = bboxes.at(j);
 
-            const cv::Rect& r = bboxes.at(i);
-            sObjectStats stats;
-            stats.id = m_nextId++;
-            stats.roi = QRectF(r.x,r.y,r.width,r.height);
-            stats.lastROIUpdate = m_eventBuffer.getCurrTime();
-            m_stats.push_back(stats);
+            float rXR = r.x+r.width;
+            float rXL = r.x;
+            float rYT = r.y;
+            float rYB = r.y+r.height;
 
+            float dx = qMin(rXR,oXR)-qMax(rXL,oXL);
+            float dy = qMin(rYB,oYB)-qMax(rYT,oYT);
+
+            float score = qMax(0.f,dx)*
+                          qMax(0.f,dy)/(sz);
+
+            if(score > currScore) {
+                currScore = score;
+                idx = j;
+            }
         }
-
-        //printf("Humans:");
-        //for(sObjectStats o:m_stats)
-        //    printf("%f %f %f %f\n",o.roi.x(),o.roi.y(),o.roi.width(),o.roi.height());
-        //printf("New: %zu\n",roi_humans.size()-foundRects.size());
+        // Close enough ?
+        if(currScore > TRACK_MIN_OVERLAP_RATIO) {
+            const cv::Rect& r = bboxes.at(idx);
+            o.trackingLost = false;
+            /* o.roi = QRectF(o.roi.x()*0.8+0.2*r.x,
+                            o.roi.y()*0.8+0.2*r.y,
+                            o.roi.width()*0.8+0.2*r.width,
+                            o.roi.height()*0.8+0.2*r.height);*/
+            o.roi = QRectF(r.x,
+                           r.y,
+                           r.width,
+                           r.height);
+            o.lastROIUpdate = m_eventBuffer.getCurrTime();
+            m_stats.push_back(o);
+            trackedRects.push_back(idx);
+        }
+        // ROI not found but still really new ?
+        else if(m_eventBuffer.getCurrTime()-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_US) {
+            o.trackingLost = true;
+            m_stats.push_back(o);
+            trackedRects.push_back(idx);
+        }
     }
+
+    // Add all missing rois
+    for(int i = 0; i < bboxes.size(); i++) {
+        bool alreadyFound = false;
+        for(int k: trackedRects)
+            if(k==i) {
+                alreadyFound=true;
+                break;
+            }
+        if(alreadyFound)
+            continue;
+
+        const cv::Rect& r = bboxes.at(i);
+        sObjectStats stats;
+        stats.id = m_nextId++;
+        stats.roi = QRectF(r.x,r.y,r.width,r.height);
+        stats.lastROIUpdate = m_eventBuffer.getCurrTime();
+        m_stats.push_back(stats);
+    }
+}
+bool compare_rect(const cv::Rect & a, const cv::Rect &b)
+{
+    return a.area() > b.area();
 }
 std::vector<cv::Rect> Processor::detect()
 {
@@ -283,32 +280,41 @@ std::vector<cv::Rect> Processor::detect()
     m_eventBuffer.releaseLockedBuffer();
 
     // Blur image
-    cv::imwrite( "Image.jpg", bufferImg );
+    //cv::imwrite( "Image.jpg", bufferImg );
     cv::GaussianBlur(bufferImg,bufferImg,
                      cv::Size(TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ,TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ),
                      TRACK_BOX_DETECTOR_GAUSS_SIGMA,TRACK_BOX_DETECTOR_GAUSS_SIGMA,cv::BORDER_REPLICATE);
 
-    cv::imwrite( "blured.jpg", bufferImg );
+    //cv::imwrite( "blured.jpg", bufferImg );
     // Treshold image
     cv::threshold(bufferImg,bufferImg,TRACK_BOX_DETECTOR_THRESHOLD,255,CV_THRESH_BINARY);
-    cv::imwrite( "threshold.jpg", bufferImg );
+    //cv::imwrite( "threshold.jpg", bufferImg );
+    m_thresholdImg = QImage(bufferImg.cols,bufferImg.rows,QImage::Format_Grayscale8);
+    memcpy((void*)m_thresholdImg.bits(),(void*)bufferImg.ptr(),bufferImg.cols*bufferImg.rows);
 
-    // Find contours
+    // Find outline contours only
     std::vector<std::vector<cv::Point> > contours;
     cv::findContours(bufferImg,contours,CV_RETR_EXTERNAL,CV_CHAIN_APPROX_SIMPLE);
 
     // Convert contours to bounding boxes
-    std::vector<cv::Rect> bboxes;
+    std::vector<cv::Rect> tmpBoxes,bboxes;
     for(int i = 0; i < contours.size(); i++) {
         cv::Rect r=cv::boundingRect(contours.at(i));
-        // Expand bounding box by 10%
-        r.x += r.width*(1-TRACK_BOX_SCALE)/2;
-        r.y += r.height*(1-TRACK_BOX_SCALE)/2;
-        r.width *= TRACK_BOX_SCALE;
-        r.height *= TRACK_BOX_SCALE;
-        if(r.area() > TRACK_MIN_AREA) {
+        tmpBoxes.push_back(r);
+    }
+
+    // Sort by area
+    sort( tmpBoxes.begin(), tmpBoxes.end(), compare_rect );
+
+    for(int i = 0; i < qMin((int)tmpBoxes.size(), TRACK_BIGGEST_N_BOXES); i++) {
+        cv::Rect r=tmpBoxes.at(i);
+        // Expand bounding box
+        r.x = qMax(0.0,r.x+r.width*(1-TRACK_BOX_SCALE)/2);
+        r.y = qMax(0.0,r.y+r.height*(1-TRACK_BOX_SCALE)/2);
+        r.width = qMin(DAVIS_IMG_WIDHT - r.x - 1.0,r.width*TRACK_BOX_SCALE);
+        r.height = qMin(DAVIS_IMG_HEIGHT - r.y - 1.0,r.height*TRACK_BOX_SCALE);
+        if(r.area() >= TRACK_MIN_AREA) {
             bboxes.push_back(r);
-            //cv::drawContours(out,contours,i,cv::Scalar(0));
         }
     }
     return bboxes;
@@ -316,12 +322,13 @@ std::vector<cv::Rect> Processor::detect()
 
 void Processor::updateStatistics(uint32_t elapsedTimeUs)
 {
-    std::vector<cv::Rect> bboxes = detect();
-
-    tracking(bboxes);
-
     // Update objects with new bounding box
     QMutexLocker locker(&m_statsMutex);
+#ifndef ASSUME_SINGLE_PERSON
+    std::vector<cv::Rect> bboxes = detect();
+    tracking(bboxes);
+#endif
+
     for(sObjectStats &stats:m_stats)
         updateObjectStats(stats, elapsedTimeUs);
 
@@ -345,7 +352,7 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     newStd.setY(0);
 
     // accumulate time
-    st.deltaTimeLastDataUpdate += elapsedTimeUs;
+    st.deltaTimeLastDataUpdateUs += elapsedTimeUs;
 
     auto & buff = m_eventBuffer.getLockedBuffer();
     for(sDVSEventDepacked & e:buff) {
@@ -357,68 +364,86 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 
     // Recompute position and standard deviation
     // if there are enough events in the buffer
-    if(evCnt > MIN_EVENT_TRESHOLD) {
-        auto & buff = m_eventBuffer.getLockedBuffer();
-        for(sDVSEventDepacked & e:buff) {
-            if(!isInROI(e,st.roi))
-                continue;
-            tmp.setX(e.x);
-            tmp.setY(e.y);
-            newCenter += tmp;
-        }
-        newCenter /= evCnt;
+    //if(evCnt/(st.roi.width()*st.roi.height()) > MIN_EVENT_PER_BOX_SIZE_RATIO) {
+    buff = m_eventBuffer.getLockedBuffer();
+    for(sDVSEventDepacked & e:buff) {
+        if(!isInROI(e,st.roi))
+            continue;
+        tmp.setX(e.x);
+        tmp.setY(e.y);
+        newCenter += tmp;
+    }
+    newCenter /= evCnt;
 
-        for(sDVSEventDepacked & e:buff) {
-            if(!isInROI(e,st.roi))
-                continue;
-            tmp.setX(e.x);
-            tmp.setY(e.y);
-            tmp -= newCenter;
-            tmp.setX(tmp.x()*tmp.x());
-            tmp.setY(tmp.y()*tmp.y());
-            tmp.setX(sqrtf(tmp.x()));
-            tmp.setY(sqrtf(tmp.y()));
-            newStd += tmp;
-        }
-        newStd /= evCnt;
-        m_eventBuffer.releaseLockedBuffer();
+    for(sDVSEventDepacked & e:buff) {
+        if(!isInROI(e,st.roi))
+            continue;
+        tmp.setX(e.x);
+        tmp.setY(e.y);
+        tmp -= newCenter;
+        tmp.setX(tmp.x()*tmp.x());
+        tmp.setY(tmp.y()*tmp.y());
+        tmp.setX(sqrtf(tmp.x()));
+        tmp.setY(sqrtf(tmp.y()));
+        newStd += tmp;
+    }
+    newStd /= evCnt;
+    m_eventBuffer.releaseLockedBuffer();
 
-        // Compute velocity
-        newVelocity.setX(1000000*(st.center.x()-newCenter.x())/st.deltaTimeLastDataUpdate);
-        newVelocity.setY(1000000*(st.center.y()-newCenter.y())/st.deltaTimeLastDataUpdate);
-        st.deltaTimeLastDataUpdate = 0;
-
-        st.center = newCenter;
-        st.std = newStd;
-        st.evCnt = evCnt;
-
-        st.velocityHistory.push_back(newVelocity);
-        if(st.velocityHistory.size()>50) {
-            st.velocityHistory.erase(st.velocityHistory.begin());
-        }
-
-        st.velocity.setX(0);
-        st.velocity.setY(0);
-        float weightSum = 0;
-        for(int i= st.velocityHistory.size()-1; i >= 0; i--) {
-            const QPointF& p = st.velocityHistory.at(i);
-            st.velocity += (i+1)*p;
-            weightSum += (i+1);
-        }
-        st.velocity /= weightSum;
-
-        st.velocityNorm = st.velocity/(2*newStd.y());
-
+    // Compute velocity if last point was set
+    if(!st.centerInitiallyComputed) {
+        newVelocity.setX(0);
+        newVelocity.setY(0);
     } else {
-        // No velocity detected
-        st.std = QPointF(0,0);
-        st.evCnt = evCnt;
-        st.velocity = QPointF(0,0);
-        st.velocityNorm = QPointF(0,0);
+        newVelocity.setX(1000000*(st.center.x()-newCenter.x())/st.deltaTimeLastDataUpdateUs);
+        newVelocity.setY(1000000*(st.center.y()-newCenter.y())/st.deltaTimeLastDataUpdateUs);
+    }
+    st.deltaTimeLastDataUpdateUs = 0;
+
+    st.center = newCenter;
+    st.std = newStd;
+    st.evCnt = evCnt;
+
+    st.velocityHistory.push_back(newVelocity);
+    if(st.velocityHistory.size()>STATS_SPEED_SMOOTHING_WINDOW_SZ) {
+        st.velocityHistory.erase(st.velocityHistory.begin());
     }
 
-    st.bbox.setX(st.center.x()-st.std.x());
-    st.bbox.setY(st.center.y()-st.std.y());
-    st.bbox.setWidth(2*st.std.x()+1);
-    st.bbox.setHeight(2*st.std.y()+1);
+    st.velocity.setX(0);
+    st.velocity.setY(0);
+    float weightSum = 0;
+    for(int i= st.velocityHistory.size()-1; i >= 0; i--) {
+        const QPointF& p = st.velocityHistory.at(i);
+        st.velocity += (i+1)*p;
+        weightSum += (i+1);
+    }
+    st.velocity /= weightSum;
+
+    st.velocityNorm = st.velocity/(2*newStd.y());
+
+    if(st.possibleFall) {
+        if(st.center.y() < FALL_DETECTOR_Y_CENTER_THRESHOLD) {
+            st.possibleFall = false;
+        }
+    } else if(st.center.y() > FALL_DETECTOR_Y_CENTER_THRESHOLD &&
+              st.velocityNorm.y() < FALL_DETECTOR_Y_SPEED_THRESHOLD) {
+        st.possibleFall = true;
+    };
+    st.centerInitiallyComputed = true;
+
+    /* } else {
+         // No velocity detected
+         st.std = QPointF(0,0);
+         st.evCnt = evCnt;
+         st.velocity = QPointF(0,0);
+         st.velocityNorm = QPointF(0,0);
+         st.skippedLastUpdate = true;
+         st.centerInitiallyComputed = false;
+     }*/
+
+    st.stdDevBox.setX(st.center.x()-st.std.x());
+    st.stdDevBox.setY(st.center.y()-st.std.y());
+    st.stdDevBox.setWidth(2*st.std.x()+1);
+    st.stdDevBox.setHeight(2*st.std.y()+1);
+
 }

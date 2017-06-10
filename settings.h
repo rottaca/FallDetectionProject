@@ -9,7 +9,7 @@
 #define TIME_WINDOW_US 100000
 // Update intervals for user interface and computations
 #define UPDATE_INTERVAL_COMP_US 1000
-#define UPDATE_INTERVAL_UI_US 50000
+#define UPDATE_INTERVAL_UI_US 10000
 // Timerange of plots
 #define PLOT_TIME_RANGE_US 10000000 // 10 sec
 
@@ -29,7 +29,7 @@
 #define TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ (TRACK_BOX_DETECTOR_GAUSS_SIGMA*2+1)
 // Threshold for binarizing the resulting smoothed image
 // Lower values expand the contour, higher values are closer to the original shape
-#define TRACK_BOX_DETECTOR_THRESHOLD (255*0.15)
+#define TRACK_BOX_DETECTOR_THRESHOLD (255*0.25)
 
 // Ratio between overlap of bounding boxes
 // and size of old box: How high has the overlap to be
@@ -49,8 +49,10 @@
 
 
 // Fall detector
-#define FALL_DETECTOR_Y_SPEED_THRESHOLD (-2.5)
-#define FALL_DETECTOR_Y_CENTER_THRESHOLD (DAVIS_IMG_HEIGHT/2)
+// Coordiante system: top -> y = 0, bottom -> y == DAVIS_IMG_HEIGHT
+#define FALL_DETECTOR_Y_SPEED_THRESHOLD (2)
+#define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (2*DAVIS_IMG_HEIGHT/3)
+#define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (DAVIS_IMG_HEIGHT/2)
 
 
 #endif // SETTINGS_H

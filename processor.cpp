@@ -222,6 +222,9 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         // Close enough ?
         if(currScore > TRACK_MIN_OVERLAP_RATIO) {
             const cv::Rect& r = bboxes.at(idx);
+
+            o.trackingPreviouslyLost = o.trackingLost;
+
             o.trackingLost = false;
             /* o.roi = QRectF(o.roi.x()*0.8+0.2*r.x,
                             o.roi.y()*0.8+0.2*r.y,
@@ -364,7 +367,6 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 
     // Recompute position and standard deviation
     // if there are enough events in the buffer
-    //if(evCnt/(st.roi.width()*st.roi.height()) > MIN_EVENT_PER_BOX_SIZE_RATIO) {
     buff = m_eventBuffer.getLockedBuffer();
     for(sDVSEventDepacked & e:buff) {
         if(!isInROI(e,st.roi))
@@ -391,45 +393,55 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     m_eventBuffer.releaseLockedBuffer();
 
     // Compute velocity if last point was set
-    if(!st.centerInitiallyComputed) {
-        newVelocity.setX(0);
-        newVelocity.setY(0);
+    newVelocity.setX(1000000*(newCenter.x()-st.center.x())/st.deltaTimeLastDataUpdateUs);
+    newVelocity.setY(1000000*(newCenter.y()-st.center.y())/st.deltaTimeLastDataUpdateUs);
+
+    if(!st.trackingLost) {
+        st.velocityHistory.push_back(newVelocity);
+        if(st.velocityHistory.size()>STATS_SPEED_SMOOTHING_WINDOW_SZ) {
+            st.velocityHistory.erase(st.velocityHistory.begin());
+        }
+
+        st.velocity.setX(0);
+        st.velocity.setY(0);
+        float weightSum = 0;
+        for(int i= st.velocityHistory.size()-1; i >= 0; i--) {
+            const QPointF& p = st.velocityHistory.at(i);
+            st.velocity += (i+1)*p;
+            weightSum += (i+1);
+        }
+        st.velocity /= weightSum;
+
+        st.velocityNorm = st.velocity/(2*newStd.y());
+
+        if(std::abs(st.velocityNorm.y()) > 2.5) {
+            printf("High speed: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu, %d, %d\n",
+                   st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs,st.trackingLost,st.trackingPreviouslyLost);
+        }
+
+        if(st.possibleFall) {
+            printf("Falling: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu\n",
+                   st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs);
+            if(newCenter.y() < FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL) {
+                st.possibleFall = false;
+            }
+        } else if(newCenter.y() > FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL &&
+                  st.velocityNorm.y() > FALL_DETECTOR_Y_SPEED_THRESHOLD) {
+            st.possibleFall = true;
+            printf("Fall detected: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu\n",
+                   st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs);
+        }
     } else {
-        newVelocity.setX(1000000*(st.center.x()-newCenter.x())/st.deltaTimeLastDataUpdateUs);
-        newVelocity.setY(1000000*(st.center.y()-newCenter.y())/st.deltaTimeLastDataUpdateUs);
+        st.velocity.setX(0);
+        st.velocity.setY(0);
+        st.velocityNorm.setX(0);
+        st.velocityNorm.setY(0);
     }
-    st.deltaTimeLastDataUpdateUs = 0;
 
     st.center = newCenter;
     st.std = newStd;
     st.evCnt = evCnt;
-
-    st.velocityHistory.push_back(newVelocity);
-    if(st.velocityHistory.size()>STATS_SPEED_SMOOTHING_WINDOW_SZ) {
-        st.velocityHistory.erase(st.velocityHistory.begin());
-    }
-
-    st.velocity.setX(0);
-    st.velocity.setY(0);
-    float weightSum = 0;
-    for(int i= st.velocityHistory.size()-1; i >= 0; i--) {
-        const QPointF& p = st.velocityHistory.at(i);
-        st.velocity += (i+1)*p;
-        weightSum += (i+1);
-    }
-    st.velocity /= weightSum;
-
-    st.velocityNorm = st.velocity/(2*newStd.y());
-
-    if(st.possibleFall) {
-        if(st.center.y() < FALL_DETECTOR_Y_CENTER_THRESHOLD) {
-            st.possibleFall = false;
-        }
-    } else if(st.center.y() > FALL_DETECTOR_Y_CENTER_THRESHOLD &&
-              st.velocityNorm.y() < FALL_DETECTOR_Y_SPEED_THRESHOLD) {
-        st.possibleFall = true;
-    };
-    st.centerInitiallyComputed = true;
+    st.deltaTimeLastDataUpdateUs = 0;
 
     /* } else {
          // No velocity detected

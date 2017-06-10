@@ -60,15 +60,13 @@ public:
         uint64_t lastROIUpdate, deltaTimeLastDataUpdateUs;
         uint32_t id;
         bool trackingLost;
-        bool skippedLastUpdate;
         bool possibleFall;
-        bool centerInitiallyComputed;
+        bool trackingPreviouslyLost;
         sObjectStats()
         {
             possibleFall = false;
-            skippedLastUpdate = false;
-            trackingLost = false;
-            centerInitiallyComputed = false;
+            trackingLost = true;
+            trackingPreviouslyLost = true;
             id = -1;
             evCnt = 0;
             lastROIUpdate = 0;

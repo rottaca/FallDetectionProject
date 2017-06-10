@@ -5,6 +5,15 @@
 
 #include "settings.h"
 
+void playbackFinished(void* ptr)
+{
+    CameraHandlerDavis* p = (CameraHandlerDavis*)ptr;
+
+    if(p->playbackFinishedCallback != NULL)
+        p->playbackFinishedCallback(p->callbackParam);
+    //p->disconnect();
+}
+
 CameraHandlerDavis::CameraHandlerDavis()
     :m_davisHandle(NULL),
      m_playbackHandle(NULL),
@@ -35,19 +44,24 @@ void CameraHandlerDavis::disconnect()
     } else if(m_playbackHandle) {
         playbackClose(m_playbackHandle);
         m_playbackHandle = NULL;
+        playbackFinishedCallback = NULL;
+        callbackParam = NULL;
     }
 }
-bool CameraHandlerDavis::connect(QString file)
+bool CameraHandlerDavis::connect(QString file, void (*playbackFinishedCallback)(void*), void* param)
 {
     if(m_isConnected)
         disconnect();
 
-    m_playbackHandle = playbackOpen(file.toStdString().c_str());
+    m_playbackHandle = playbackOpen(file.toStdString().c_str(),playbackFinished,this);
 
     if(m_playbackHandle == NULL) {
         printf("Can't open file for playback!\n");
         return false;
     } else {
+        m_isConnected = true;
+        this->playbackFinishedCallback = playbackFinishedCallback;
+        this->callbackParam = param;
         return true;
     }
 }
@@ -62,7 +76,7 @@ bool CameraHandlerDavis::connect(int devId)
         printf("Can't connect to device!\n");
         return false;
     }
-
+    m_isConnected = true;
     struct caer_davis_info davis_info = getInfo();
 
     printf("%s --- ID: %d, Master: %d, DVS X: %d, DVS Y: %d, Logic: %d.\n", davis_info.deviceString,

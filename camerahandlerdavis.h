@@ -19,7 +19,7 @@ public:
     CameraHandlerDavis();
     ~CameraHandlerDavis();
 
-    bool connect(QString file);
+    bool connect(QString file, void (*playbackFinishedCallback) (void*), void* param);
     bool connect(int devId = 1);
     void disconnect();
     void startStreaming();
@@ -50,6 +50,18 @@ public:
         m_frameReciever = reciever;
     }
 
+    bool isStreaming()
+    {
+        return m_isStreaming;
+    }
+    bool isConnected()
+    {
+        return m_isConnected;
+    }
+
+
+    void (*playbackFinishedCallback) (void*);
+    void* callbackParam;
 protected:
     caerDeviceHandle m_davisHandle;
     playbackHandle m_playbackHandle;
@@ -62,6 +74,7 @@ protected:
     IFrameReciever* m_frameReciever;
 
     int32_t currTs;
+
 };
 
 #endif // CAMERAHANDLER_H

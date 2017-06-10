@@ -29,9 +29,18 @@ public:
 
     void closeEvent (QCloseEvent *event);
 
+
+    bool processingStopped;
+
 public slots:
     void redrawUI();
 
+    void onClickPlaybackConnect();
+    void onClickOnlineConnect();
+    void onClickBrowsePlaybackFile();
+
+private:
+    void setupUI();
 private:
     Ui::MainWindow *ui;
     QTimer* timer;
@@ -43,6 +52,7 @@ private:
     SimpleTimePlot *plotVerticalCentroid;
     SimpleTimePlot *plotSpeed;
     AspectRatioPixmap * imgFalls[TRACK_BIGGEST_N_BOXES];
+
 };
 
 #endif // MAINWINDOW_H

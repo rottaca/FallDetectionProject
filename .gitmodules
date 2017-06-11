@@ -1,0 +1,3 @@
+[submodule "AdditionalLibs/libcaer"]
+	path = AdditionalLibs/libcaer
+	url = https://github.com/rottaca/libcaer.git

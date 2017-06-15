@@ -33,6 +33,8 @@ public:
     void addEvents(std::queue<sDVSEventDepacked> &events);
 
 
+    void clear();
+
     int getSize()
     {
         QMutexLocker locker(&m_lock);

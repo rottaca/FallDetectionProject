@@ -134,11 +134,9 @@ void CameraHandlerDavis::run()
 
         if (packetContainer == NULL) {
             // Wait a bit!
-            // TODO use call back function of libscaer
-            QThread::usleep(10);
+            QThread::usleep(1);
             //QThread::yieldCurrentThread();
             continue; // Skip if nothing there.
-            //printf("No Data for camera handler..\n");
         }
 
         int32_t packetNum = caerEventPacketContainerGetEventPacketsNumber(packetContainer);

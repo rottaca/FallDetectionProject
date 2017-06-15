@@ -7,6 +7,14 @@ EventBuffer::EventBuffer():m_timeWindow(0)
 {
 }
 
+
+void EventBuffer::clear()
+{
+
+    QMutexLocker locker(&m_lock);
+    m_buffer.clear();
+}
+
 void EventBuffer::setup(const uint32_t timewindow)
 {
     QMutexLocker locker(&m_lock);
@@ -32,29 +40,34 @@ void EventBuffer::addEvents(std::queue<sDVSEventDepacked> & events)
         return;
 
     uint32_t newTsStart = events.back().ts;
-
-    // Add events
-    //int lastTS = events.front().ts;
-    while(!events.empty()) {
-        const sDVSEventDepacked &ev = events.front();
-        // Don't block for the whole function or other threads are slowed down
-        {
-            QMutexLocker locker(&m_lock);
-            m_buffer.push_front(ev);
-        }
-        //if(lastTS > events.front().ts)
-        // printf("Jump: %d to %d\n", lastTS,events.front().ts);
-        //lastTS = events.front().ts;
-        events.pop();
-    }
+    QMutexLocker locker(&m_lock);
 
     // Remove all old events
     // Here, we have to lock for the whole period
-    QMutexLocker locker(&m_lock);
+
     while (m_buffer.size() > 0 &&
             newTsStart - m_buffer.back().ts > m_timeWindow) {
         m_buffer.pop_back();
     }
+
+
+    // Add events
+    while(!events.empty()) {
+        const sDVSEventDepacked &ev = events.front();
+        // Don't block for the whole function or other threads are slowed down
+
+        if(m_buffer.size() > 0 && m_buffer.front().ts > events.front().ts)
+            printf("Time jump: %d to %d\n", m_buffer.front().ts,events.front().ts);
+
+        {
+            // BUGFIX: Skip if we recieve the same events
+            //if(m_buffer.size() == 0 || m_buffer.front().x != ev.x || m_buffer.front().y != ev.y ||  ev.ts - m_buffer.front().ts > 10)
+            m_buffer.push_front(ev);
+        }
+
+        events.pop();
+    }
+
     //printf("Buff: %zu\n",m_buffer.size());
 }
 

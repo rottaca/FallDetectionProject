@@ -9,7 +9,7 @@
 #define TIME_WINDOW_US 100000
 // Update intervals for user interface and computations
 #define UPDATE_INTERVAL_COMP_US 1000
-#define UPDATE_INTERVAL_UI_US 10000
+#define UPDATE_INTERVAL_UI_US 20000
 // Timerange of plots
 #define PLOT_TIME_RANGE_US 10000000 // 10 sec
 
@@ -50,7 +50,7 @@
 
 // Fall detector
 // Coordiante system: top -> y = 0, bottom -> y == DAVIS_IMG_HEIGHT
-#define FALL_DETECTOR_Y_SPEED_THRESHOLD (2)
+#define FALL_DETECTOR_Y_SPEED_THRESHOLD (2.75)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (2*DAVIS_IMG_HEIGHT/3)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (DAVIS_IMG_HEIGHT/2)
 

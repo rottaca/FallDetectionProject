@@ -30,6 +30,18 @@ void Processor::start()
 {
     if(m_isRunning)
         stop();
+
+
+    // Clear event queue
+    {
+        QMutexLocker locker(&m_queueMutex);
+        while (!m_eventQueue.empty()) {
+            m_eventQueue.pop();
+        }
+    }
+    m_eventBuffer.clear();
+    m_stats.clear();
+    m_newFrameAvailable = false;
     m_isRunning = true;
     m_future = QtConcurrent::run(this, &Processor::run);
 }
@@ -37,7 +49,6 @@ void Processor::start()
 void Processor::stop()
 {
     m_isRunning = false;
-    m_waitForData.wakeAll();
     m_future.waitForFinished();
 }
 
@@ -46,9 +57,8 @@ void Processor::newEvent(const sDVSEventDepacked & event)
     {
         QMutexLocker locker(&m_queueMutex);
         m_eventQueue.push(event);
-        // TODO: Detect time jump
+        //printf("%d %d %d\n",event.x,event.y,m_eventQueue.size());
     }
-    m_waitForData.wakeAll();
 }
 
 void Processor::newFrame(const caerFrameEvent &frame)
@@ -85,53 +95,71 @@ void Processor::newFrame(const caerFrameEvent &frame)
         }
     }
 #endif
-    m_waitForData.wakeAll();
 }
 
 void Processor::run()
 {
     printf("Processor started.\n");
-    m_updateStatsTimer.start();
+    m_updateStatsTimer.restart();
     //QElapsedTimer comTimer;
+    //QElapsedTimer t,t2;
+    //t.start();
     while (m_isRunning) {
-        //comTimer.start();
-        // New events available ?
-        if(m_eventQueue.size() == 0 && m_newFrameAvailable) {
-            QMutexLocker locker(&m_waitMutex);
-            m_waitForData.wait(&m_waitMutex);    // Avoid busy waiting
-            continue;
-        }
-        // Process data
-        else {
-            // Process events and add them to the buffer
-            // Remove old ones if necessary
-            if(m_eventQueue.size()>0) {
-                QMutexLocker locker(&m_queueMutex);
-                m_eventBuffer.addEvents(m_eventQueue);
-            }
-            // Process frame
-            if(m_newFrameAvailable && m_futureAnyncPedestrianDetector.isFinished()) {
-                {
-                    QMutexLocker locker(&m_frameMutex);
-                    m_currFrameFPS = (1.0f-FPS_LOWPASS_FILTER_COEFF)*m_currFrameFPS+
-                                     FPS_LOWPASS_FILTER_COEFF*(1000.0f/m_frameTimer.elapsed());
-                    m_frameTimer.restart();
-                    m_newFrameAvailable = false;
-                }
-                // Execute face detection in different thread
-                //m_futureAnyncPedestrianDetector = QtConcurrent::run(this, &Processor::processImage);
-            }
 
-            // Recompute buffer stats
-            if(m_updateStatsTimer.nsecsElapsed()/1000 > m_updateStatsInterval) {
-                uint64_t elapsedTime = m_updateStatsTimer.nsecsElapsed()/1000;
-                //printf("Update: %u",elapsedTime);
-                m_updateStatsTimer.restart();
-                updateStatistics(elapsedTime);
-            }
+        // Check if anything has to be done
+        // New events available ?
+        // New frames avalibale ?
+        // Only sleep if we don't have to process the data
+        if(m_eventQueue.size() == 0 && !m_newFrameAvailable) {
+            // Don't waist resources: Sleep until next update step
+            QThread::usleep(qMax(0LL,m_updateStatsInterval-m_updateStatsTimer.nsecsElapsed()/1000));
         }
+
+        // Process data
+        //printf("Tasks: %lu %d %lld\n",m_eventQueue.size(), m_newFrameAvailable,m_updateStatsTimer.nsecsElapsed()/1000);
+
+        // Process events and add them to the buffer
+        // Remove old ones if necessary
+        // t2.start();
+        if(m_eventQueue.size()>0) {
+            QMutexLocker locker(&m_queueMutex);
+            m_eventBuffer.addEvents(m_eventQueue);
+        }
+        //printf("Event Update: %lld\n",t2.nsecsElapsed()/1000);
+        // Process frame
+        if(m_newFrameAvailable && m_futureAnyncPedestrianDetector.isFinished()) {
+            {
+                QMutexLocker locker(&m_frameMutex);
+                m_currFrameFPS = (1.0f-FPS_LOWPASS_FILTER_COEFF)*m_currFrameFPS+
+                                 FPS_LOWPASS_FILTER_COEFF*1000.0f/m_frameTimer.elapsed();
+                m_frameTimer.restart();
+                m_newFrameAvailable = false;
+            }
+            // Execute face detection in different thread
+            //m_futureAnyncPedestrianDetector = QtConcurrent::run(this, &Processor::processImage);
+        }
+        //t2.restart();
+        // Recompute buffer stats
+        if(m_updateStatsTimer.nsecsElapsed()/1000 > m_updateStatsInterval) {
+            //printf("Update: %u",elapsedTime);
+
+            m_currProcFPS = (1.0f-FPS_LOWPASS_FILTER_COEFF)*m_currProcFPS +
+                            FPS_LOWPASS_FILTER_COEFF*1000.0f/m_updateStatsTimer.elapsed();
+
+            //printf("FPS: %f %f\n",m_currProcFPS, 1000000000.0f/m_updateStatsTimer.nsecsElapsed());
+            //printf("Elapsed: %lld instead of %d\n",m_updateStatsTimer.nsecsElapsed()/1000, m_updateStatsInterval);
+            uint64_t elapsedTime = m_updateStatsTimer.nsecsElapsed()/1000;
+            m_updateStatsTimer.restart();
+            updateStatistics(elapsedTime);
+            //printf("Update done.\n");
+        }
+        //printf("Stats Update: %lld\n",t2.nsecsElapsed()/1000);
+
+        //printf("Update: %lld\n",t.nsecsElapsed()/1000);
+        //t.restart();
         //printf("%lld\n",comTimer.nsecsElapsed());
     }
+
     printf("Processor stopped.\n");
 }
 
@@ -170,6 +198,7 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
     QVector<sObjectStats> oldStats = m_stats;
     m_stats.clear();
 
+    uint64_t currTime = m_eventBuffer.getCurrTime();
 
     /*  if(bboxes.size() == 0) {
           cv::Rect r;
@@ -219,11 +248,11 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
                 idx = j;
             }
         }
+        o.trackingPreviouslyLost = o.trackingLost;
+
         // Close enough ?
         if(currScore > TRACK_MIN_OVERLAP_RATIO) {
             const cv::Rect& r = bboxes.at(idx);
-
-            o.trackingPreviouslyLost = o.trackingLost;
 
             o.trackingLost = false;
             /* o.roi = QRectF(o.roi.x()*0.8+0.2*r.x,
@@ -234,12 +263,12 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
                            r.y,
                            r.width,
                            r.height);
-            o.lastROIUpdate = m_eventBuffer.getCurrTime();
+            o.lastROIUpdate = currTime;
             m_stats.push_back(o);
             trackedRects.push_back(idx);
         }
         // ROI not found but still really new ?
-        else if(m_eventBuffer.getCurrTime()-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_US) {
+        else if(currTime-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_US) {
             o.trackingLost = true;
             m_stats.push_back(o);
             trackedRects.push_back(idx);
@@ -261,7 +290,7 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         sObjectStats stats;
         stats.id = m_nextId++;
         stats.roi = QRectF(r.x,r.y,r.width,r.height);
-        stats.lastROIUpdate = m_eventBuffer.getCurrTime();
+        stats.lastROIUpdate = currTime;
         m_stats.push_back(stats);
     }
 }
@@ -326,17 +355,20 @@ std::vector<cv::Rect> Processor::detect()
 void Processor::updateStatistics(uint32_t elapsedTimeUs)
 {
     // Update objects with new bounding box
-    QMutexLocker locker(&m_statsMutex);
-#ifndef ASSUME_SINGLE_PERSON
     std::vector<cv::Rect> bboxes = detect();
-    tracking(bboxes);
-#endif
+    //printf("Detect: %lld\n",t.nsecsElapsed()/1000);
+    //t.restart();
 
+    QMutexLocker locker(&m_statsMutex);
+    tracking(bboxes);
+    //printf("Track: %lld\n",t.nsecsElapsed()/1000);
+
+
+
+    //t.restart();
     for(sObjectStats &stats:m_stats)
         updateObjectStats(stats, elapsedTimeUs);
 
-    m_currProcFPS = (1-FPS_LOWPASS_FILTER_COEFF)*m_currProcFPS +
-                    FPS_LOWPASS_FILTER_COEFF*1000000.0f/elapsedTimeUs;
 }
 
 inline bool Processor::isInROI(const sDVSEventDepacked& e, const QRectF &roi)
@@ -358,19 +390,13 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     st.deltaTimeLastDataUpdateUs += elapsedTimeUs;
 
     auto & buff = m_eventBuffer.getLockedBuffer();
+    // Recompute position and standard deviation
+    // if there are enough events in the buffer
+
     for(sDVSEventDepacked & e:buff) {
         if(!isInROI(e,st.roi))
             continue;
         evCnt++;
-    }
-    m_eventBuffer.releaseLockedBuffer();
-
-    // Recompute position and standard deviation
-    // if there are enough events in the buffer
-    buff = m_eventBuffer.getLockedBuffer();
-    for(sDVSEventDepacked & e:buff) {
-        if(!isInROI(e,st.roi))
-            continue;
         tmp.setX(e.x);
         tmp.setY(e.y);
         newCenter += tmp;
@@ -415,13 +441,13 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
         st.velocityNorm = st.velocity/(2*newStd.y());
 
         if(std::abs(st.velocityNorm.y()) > 2.5) {
-            printf("High speed: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu, %d, %d\n",
-                   st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs,st.trackingLost,st.trackingPreviouslyLost);
+            //printf("High speed: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu, %d, %d\n",
+            //st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs,st.trackingLost,st.trackingPreviouslyLost);
         }
 
         if(st.possibleFall) {
-            printf("Falling: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu\n",
-                   st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs);
+            //printf("Falling: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu\n",
+            //       st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs);
             if(newCenter.y() < FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL) {
                 st.possibleFall = false;
             }

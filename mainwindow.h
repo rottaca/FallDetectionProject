@@ -38,6 +38,7 @@ public slots:
     void onClickPlaybackConnect();
     void onClickOnlineConnect();
     void onClickBrowsePlaybackFile();
+    void onPlayspeedChanged();
 
 private:
     void setupUI();

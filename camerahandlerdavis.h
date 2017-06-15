@@ -59,6 +59,13 @@ public:
         return m_isConnected;
     }
 
+    void changePlaybackSpeed(float speed)
+    {
+        //QMutexLocker locker(&m_camLock);
+        if(m_playbackHandle != NULL)
+            playbackChangeSpeed(m_playbackHandle,speed);
+
+    }
 
     void (*playbackFinishedCallback) (void*);
     void* callbackParam;

@@ -112,8 +112,6 @@ private:
     std::atomic_bool m_isRunning;
     QFuture<void> m_future;
 
-    QMutex m_waitMutex;
-    QWaitCondition m_waitForData;
     EventBuffer m_eventBuffer;
 
     QMutex m_queueMutex;

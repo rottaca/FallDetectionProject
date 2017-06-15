@@ -26,6 +26,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->b_online_connect,SIGNAL(clicked()),this,SLOT(onClickOnlineConnect()));
     connect(ui->b_playback_connect,SIGNAL(clicked()),this,SLOT(onClickPlaybackConnect()));
     connect(ui->b_playback_browse,SIGNAL(clicked()),this,SLOT(onClickBrowsePlaybackFile()));
+    connect(ui->dsb_playspeed,SIGNAL(editingFinished()),this,SLOT(onPlayspeedChanged()));
 
     processingStopped = false;
 
@@ -74,6 +75,12 @@ void MainWindow::setupUI()
     ui->gridLayout->addWidget(plotSpeed);
 }
 
+void MainWindow::onPlayspeedChanged()
+{
+    qDebug("changed");
+    camHandler.changePlaybackSpeed(ui->dsb_playspeed->value());
+}
+
 void MainWindow::onClickPlaybackConnect()
 {
     if(camHandler.isConnected()) {
@@ -88,6 +95,7 @@ void MainWindow::onClickPlaybackConnect()
             QMessageBox::critical(this,"Error","Can't open file!");
             return;
         }
+        onPlayspeedChanged();
         ui->b_online_connect->setEnabled(false);
         ui->b_playback_connect->setText("stop");
 
@@ -147,13 +155,15 @@ void MainWindow::redrawUI()
         EventBuffer & buff = proc.getBuffer();
         QVector<Processor::sObjectStats> statsList = proc.getStats();
         int time = buff.getCurrTime();
+
+        int evCnt = buff.getSize();
+        ui->l_status->setText(QString("Events: %1 GUI FPS: %2").arg(evCnt).arg(m_uiRedrawFPS,0,'g',3));
+
         if(statsList.size() > 0) {
             Processor::sObjectStats stats = statsList.at(0);
             plotEventsInWindow->addPoint(time,stats.evCnt);
             plotVerticalCentroid->addPoint(time,stats.center.y());
             plotSpeed->addPoint(time,stats.velocityNorm.y());
-            int evCnt = buff.getSize();
-            ui->l_status->setText(QString("Events: %1 GUI FPS: %2").arg(evCnt).arg(m_uiRedrawFPS,0,'g',3));
         } else {
             plotEventsInWindow->addPoint(time,nan(""));
             plotVerticalCentroid->addPoint(time,nan(""));

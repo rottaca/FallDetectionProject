@@ -3,22 +3,23 @@
 
 #include "settings.h"
 
-EventBuffer::EventBuffer():m_timeWindow(0)
+EventBuffer::EventBuffer():m_timeWindow(0),m_sx(0),m_sy(0)
 {
 }
 
 
 void EventBuffer::clear()
 {
-
     QMutexLocker locker(&m_lock);
     m_buffer.clear();
 }
 
-void EventBuffer::setup(const uint32_t timewindow)
+void EventBuffer::setup(const uint32_t timewindow, const uint16_t sx, const uint16_t sy)
 {
     QMutexLocker locker(&m_lock);
     m_timeWindow = timewindow;
+    m_sx = sx;
+    m_sy = sy;
     m_buffer.clear();
 }
 
@@ -60,8 +61,6 @@ void EventBuffer::addEvents(std::queue<sDVSEventDepacked> & events)
             printf("Time jump: %d to %d\n", m_buffer.front().ts,events.front().ts);
 
         {
-            // BUGFIX: Skip if we recieve the same events
-            //if(m_buffer.size() == 0 || m_buffer.front().x != ev.x || m_buffer.front().y != ev.y ||  ev.ts - m_buffer.front().ts > 10)
             m_buffer.push_front(ev);
         }
 
@@ -73,7 +72,7 @@ void EventBuffer::addEvents(std::queue<sDVSEventDepacked> & events)
 
 QImage EventBuffer::toImage()
 {
-    QImage img(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT,QImage::Format_RGB888);
+    QImage img(m_sx,m_sy,QImage::Format_RGB888);
 
     img.fill(Qt::white);
     QMutexLocker locker(&m_lock);

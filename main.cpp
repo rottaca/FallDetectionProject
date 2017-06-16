@@ -3,7 +3,7 @@
 #include <QApplication>
 #include <QThreadPool>
 
-#include "camerahandlerdavis.h"
+#include "camerahandler.h"
 #include "processor.h"
 
 int main(int argc, char *argv[])

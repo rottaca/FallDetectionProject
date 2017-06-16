@@ -56,12 +56,12 @@ void MainWindow::setupUI()
     }
 
     plotEventsInWindow = new SimpleTimePlot(this);
-    plotEventsInWindow->setYRange(0,20000);
+    plotEventsInWindow->setYRange(0,40000);
     plotEventsInWindow->setXRange(PLOT_TIME_RANGE_US);
     plotEventsInWindow->setTitle("Event Count");
 
     plotVerticalCentroid = new SimpleTimePlot(this);
-    plotVerticalCentroid->setYRange(0,DAVIS_IMG_HEIGHT);
+    plotVerticalCentroid->setYRange(0,180);
     plotVerticalCentroid->setXRange(PLOT_TIME_RANGE_US);
     plotVerticalCentroid->setTitle("Vertical centroid");
 
@@ -99,7 +99,8 @@ void MainWindow::onClickPlaybackConnect()
         ui->b_online_connect->setEnabled(false);
         ui->b_playback_connect->setText("stop");
 
-        proc.start();
+        QVector2D sz = camHandler.getFrameSize();
+        proc.start(sz.x(),sz.y());
         camHandler.startStreaming();
     }
 
@@ -120,7 +121,9 @@ void MainWindow::onClickOnlineConnect()
         }
         ui->b_playback_connect->setEnabled(false);
         ui->b_online_connect->setText("stop");
-        proc.start();
+
+        QVector2D sz = camHandler.getFrameSize();
+        proc.start(sz.x(),sz.y());
         camHandler.startStreaming();
     }
 }

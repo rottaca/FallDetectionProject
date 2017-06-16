@@ -31,18 +31,18 @@ QMAKE_CXXFLAGS += -fopenmp
 SOURCES += main.cpp\
         mainwindow.cpp \
     eventbuffer.cpp \
-    camerahandlerdavis.cpp \
     processor.cpp \
     simpletimeplot.cpp \
-    aspectratiopixmap.cpp
+    aspectratiopixmap.cpp \
+    camerahandler.cpp
 
 HEADERS  += mainwindow.h \
     eventbuffer.h \
-    camerahandlerdavis.h \
     processor.h \
     datatypes.h \
     simpletimeplot.h \
     settings.h \
-    aspectratiopixmap.h
+    aspectratiopixmap.h \
+    camerahandler.h
 
 FORMS    += mainwindow.ui

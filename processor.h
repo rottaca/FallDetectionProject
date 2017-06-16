@@ -16,20 +16,20 @@
 #include <libcaer/events/polarity.h>
 #include <libcaer/events/frame.h>
 
-#include "camerahandlerdavis.h"
+#include "camerahandler.h"
 #include "eventbuffer.h"
 
 #include "settings.h"
 
 class Processor:  public QObject,
-    public CameraHandlerDavis::IDVSEventReciever,
-    public CameraHandlerDavis::IFrameReciever
+    public CameraHandler::IDVSEventReciever,
+    public CameraHandler::IFrameReciever
 {
     Q_OBJECT
 public:
     Processor();
 
-    void start();
+    void start(uint16_t sx, uint16_t sy);
     void stop();
 
     void newEvent(const sDVSEventDepacked & event);
@@ -96,6 +96,8 @@ public:
         return m_currFrameFPS;
     }
 
+
+
 signals:
     void updateUI(QString msg);
 
@@ -113,6 +115,7 @@ private:
     QFuture<void> m_future;
 
     EventBuffer m_eventBuffer;
+    uint16_t m_sx,m_sy;
 
     QMutex m_queueMutex;
     std::queue<sDVSEventDepacked> m_eventQueue;

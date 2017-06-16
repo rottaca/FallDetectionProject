@@ -1,20 +1,20 @@
-#include "camerahandlerdavis.h"
+#include "camerahandler.h"
 
-
+#include <QVector2D>
 #include <QtConcurrent/QtConcurrent>
 
 #include "settings.h"
 
 void playbackFinished(void* ptr)
 {
-    CameraHandlerDavis* p = (CameraHandlerDavis*)ptr;
+    CameraHandler* p = (CameraHandler*)ptr;
 
     if(p->playbackFinishedCallback != NULL)
         p->playbackFinishedCallback(p->callbackParam);
     //p->disconnect();
 }
 
-CameraHandlerDavis::CameraHandlerDavis()
+CameraHandler::CameraHandler()
     :m_davisHandle(NULL),
      m_playbackHandle(NULL),
      m_isStreaming(false),
@@ -24,14 +24,14 @@ CameraHandlerDavis::CameraHandlerDavis()
 {
     currTs = 0;
 }
-CameraHandlerDavis::~CameraHandlerDavis()
+CameraHandler::~CameraHandler()
 {
     if(m_isConnected)
         disconnect();
     QMutexLocker locker(&m_camLock);
 }
 
-void CameraHandlerDavis::disconnect()
+void CameraHandler::disconnect()
 {
     if(m_isStreaming)
         stopStreaming();
@@ -48,7 +48,7 @@ void CameraHandlerDavis::disconnect()
         callbackParam = NULL;
     }
 }
-bool CameraHandlerDavis::connect(QString file, void (*playbackFinishedCallback)(void*), void* param)
+bool CameraHandler::connect(QString file, void (*playbackFinishedCallback)(void*), void* param)
 {
     if(m_isConnected)
         disconnect();
@@ -62,11 +62,16 @@ bool CameraHandlerDavis::connect(QString file, void (*playbackFinishedCallback)(
         m_isConnected = true;
         this->playbackFinishedCallback = playbackFinishedCallback;
         this->callbackParam = param;
+
+        playbackInfo info = caerPlaybackInfoGet(m_playbackHandle);
+
+        printf("DVS X: %d, DVS Y: %d.\n",  info->sx, info->sy);
+
         return true;
     }
 }
 
-bool CameraHandlerDavis::connect(int devId)
+bool CameraHandler::connect(int devId)
 {
     if(m_isConnected)
         disconnect();
@@ -77,7 +82,7 @@ bool CameraHandlerDavis::connect(int devId)
         return false;
     }
     m_isConnected = true;
-    struct caer_davis_info davis_info = getInfo();
+    struct caer_davis_info davis_info = caerDavisInfoGet(m_davisHandle);
 
     printf("%s --- ID: %d, Master: %d, DVS X: %d, DVS Y: %d, Logic: %d.\n", davis_info.deviceString,
            davis_info.deviceID, davis_info.deviceIsMaster, davis_info.dvsSizeX, davis_info.dvsSizeY,
@@ -87,27 +92,40 @@ bool CameraHandlerDavis::connect(int devId)
     return true;
 }
 
-void CameraHandlerDavis::startStreaming()
+void CameraHandler::startStreaming()
 {
     if(m_isStreaming)
         stopStreaming();
     m_isStreaming = true;
-    m_future = QtConcurrent::run(this, &CameraHandlerDavis::run);
+    m_future = QtConcurrent::run(this, &CameraHandler::run);
 }
 
-void CameraHandlerDavis::stopStreaming()
+void CameraHandler::stopStreaming()
 {
     m_isStreaming = false;
     m_future.waitForFinished();
 }
-
-struct caer_davis_info CameraHandlerDavis::getInfo()
+QVector2D CameraHandler::getFrameSize()
 {
-    QMutexLocker locker(&m_camLock);
-    return caerDavisInfoGet(m_davisHandle);
+    if(m_isConnected) {
+        int sx = 0,sy = 0;
+        if(m_davisHandle) {
+            struct caer_davis_info info = caerDavisInfoGet(m_davisHandle);
+            sx = info.apsSizeX;
+            sy = info.apsSizeY;
+        } else if(m_playbackHandle) {
+            playbackInfo info = caerPlaybackInfoGet(m_playbackHandle);
+            sx = info->sx;
+            sy = info->sy;
+        }
+        return QVector2D(sx,sy);
+
+    } else {
+        return QVector2D();
+    }
 }
 
-void CameraHandlerDavis::run()
+void CameraHandler::run()
 {
     if(m_davisHandle != NULL) {
         bool success = caerDeviceDataStart(m_davisHandle, NULL, NULL, NULL, NULL, NULL);
@@ -193,7 +211,7 @@ void CameraHandlerDavis::run()
 
     printf("Streaming stopped.\n");
 }
-void CameraHandlerDavis::writeConfig()
+void CameraHandler::writeConfig()
 {
     QMutexLocker locker(&m_camLock);
     if(!m_isConnected)

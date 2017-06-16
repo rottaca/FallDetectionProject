@@ -13,18 +13,20 @@
 
 #include "datatypes.h"
 
-class CameraHandlerDavis
+class CameraHandler
 {
 public:
-    CameraHandlerDavis();
-    ~CameraHandlerDavis();
+    CameraHandler();
+    ~CameraHandler();
 
     bool connect(QString file, void (*playbackFinishedCallback) (void*), void* param);
     bool connect(int devId = 1);
     void disconnect();
     void startStreaming();
     void stopStreaming();
-    struct caer_davis_info getInfo();
+
+    QVector2D getFrameSize();
+
     void writeConfig();
 
     void run();

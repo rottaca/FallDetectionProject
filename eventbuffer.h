@@ -22,7 +22,7 @@ public:
     *        holds all events in the specified timewindow.
     * @param timewindow
     */
-    void setup(const uint32_t timewindow);
+    void setup(const uint32_t timewindow, const uint16_t sx, const uint16_t sy);
 
     /**
      * @brief addEvent Adds a new event to the
@@ -44,7 +44,10 @@ public:
     uint32_t getCurrTime()
     {
         QMutexLocker locker(&m_lock);
-        return m_buffer.front().ts;
+        if(m_buffer.size() > 0)
+            return m_buffer.front().ts;
+        else
+            return 0;
     }
 
     std::deque<sDVSEventDepacked> &getLockedBuffer()
@@ -69,7 +72,7 @@ protected:
     // TODO Add Kd-Tree for bounding box - search
 
     uint32_t m_timeWindow;
-
+    uint16_t m_sx,m_sy;
     QMutex m_lock;
 };
 

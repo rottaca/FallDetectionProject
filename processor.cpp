@@ -11,22 +11,13 @@ Processor::Processor():
     m_timewindow(TIME_WINDOW_US),
     m_updateStatsInterval(UPDATE_INTERVAL_COMP_US)
 {
-    m_eventBuffer.setup(m_timewindow);
-    m_currFrame = QImage(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT,QImage::Format_Grayscale8);
     m_newFrameAvailable = false;
     m_nextId = 0;
-
-#ifdef ASSUME_SINGLE_PERSON
-    sObjectStats stats;
-    stats.roi = QRectF(0,0,DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT);
-    stats.id = m_nextId++;
-    m_stats.push_back(stats);
-#endif
 
     m_currProcFPS = 0;
     m_currFrameFPS = 0;
 }
-void Processor::start()
+void Processor::start(uint16_t sx, uint16_t sy)
 {
     if(m_isRunning)
         stop();
@@ -39,6 +30,11 @@ void Processor::start()
             m_eventQueue.pop();
         }
     }
+    m_sx = sx;
+    m_sy = sy;
+    m_eventBuffer.setup(m_timewindow,sx,sy);
+    m_currFrame = QImage(sx,sy,QImage::Format_Grayscale8);
+    m_currFrame.fill(0);
     m_eventBuffer.clear();
     m_stats.clear();
     m_newFrameAvailable = false;
@@ -82,15 +78,15 @@ void Processor::newFrame(const caerFrameEvent &frame)
         }
     }
 #else
-    assert(frame->lengthX == DAVIS_IMG_WIDHT);
-    assert(frame->lengthY == DAVIS_IMG_HEIGHT);
+    assert(frame->lengthX == m_sx);
+    assert(frame->lengthY == m_sy);
     {
         QMutexLocker locker(&m_frameMutex);
         m_newFrameAvailable = true;
         // Convert to qt image
         uchar* ptr = m_currFrame.bits();
         u_int16_t* inPtr = frame->pixels;
-        for(int i = 0; i < DAVIS_IMG_WIDHT*DAVIS_IMG_HEIGHT; i++) {
+        for(int i = 0; i < m_sx*m_sy; i++) {
             ptr[i] = inPtr[i]>>8;
         }
     }
@@ -193,21 +189,70 @@ void Processor::processImage()
     }
 }
 
+bool compare_rect(const cv::Rect & a, const cv::Rect &b)
+{
+    return a.area() > b.area();
+}
+std::vector<cv::Rect> Processor::detect()
+{
+    // Compute image of current event buffer
+    cv::Mat bufferImg(cv::Size(m_sx,m_sy), CV_8UC1);
+    bufferImg.setTo(cv::Scalar(0));
+    uchar* p;
+    auto & buff = m_eventBuffer.getLockedBuffer();
+    for(sDVSEventDepacked & e:buff) {
+        p = bufferImg.ptr<uchar>(e.y,e.x);
+        *p = 255;
+    }
+    m_eventBuffer.releaseLockedBuffer();
+
+    // Blur image
+    //cv::imwrite( "Image.jpg", bufferImg );
+    cv::GaussianBlur(bufferImg,bufferImg,
+                     cv::Size(TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ,TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ),
+                     TRACK_BOX_DETECTOR_GAUSS_SIGMA,TRACK_BOX_DETECTOR_GAUSS_SIGMA,cv::BORDER_REPLICATE);
+
+    //cv::imwrite( "blured.jpg", bufferImg );
+    // Treshold image
+    cv::threshold(bufferImg,bufferImg,TRACK_BOX_DETECTOR_THRESHOLD,255,CV_THRESH_BINARY);
+    //cv::imwrite( "threshold.jpg", bufferImg );
+    m_thresholdImg = QImage(bufferImg.cols,bufferImg.rows,QImage::Format_Grayscale8);
+    memcpy((void*)m_thresholdImg.bits(),(void*)bufferImg.ptr(),bufferImg.cols*bufferImg.rows);
+
+    // Find outline contours only
+    std::vector<std::vector<cv::Point> > contours;
+    cv::findContours(bufferImg,contours,CV_RETR_EXTERNAL,CV_CHAIN_APPROX_SIMPLE);
+
+    // Convert contours to bounding boxes
+    std::vector<cv::Rect> tmpBoxes,bboxes;
+    for(int i = 0; i < contours.size(); i++) {
+        cv::Rect r=cv::boundingRect(contours.at(i));
+        tmpBoxes.push_back(r);
+    }
+
+    // Sort by area
+    sort( tmpBoxes.begin(), tmpBoxes.end(), compare_rect );
+
+    for(int i = 0; i < qMin((int)tmpBoxes.size(), TRACK_BIGGEST_N_BOXES); i++) {
+        cv::Rect r=tmpBoxes.at(i);
+        // Expand bounding box
+        r.x = qMax(0.0,r.x+r.width*(1-TRACK_BOX_SCALE)/2);
+        r.y = qMax(0.0,r.y+r.height*(1-TRACK_BOX_SCALE)/2);
+        r.width = qMin(m_sx - r.x - 1.0,r.width*TRACK_BOX_SCALE);
+        r.height = qMin(m_sy - r.y - 1.0,r.height*TRACK_BOX_SCALE);
+        if(r.area() >= TRACK_MIN_AREA) {
+            bboxes.push_back(r);
+        }
+    }
+    return bboxes;
+}
+
 void Processor::tracking(std::vector<cv::Rect> &bboxes)
 {
     QVector<sObjectStats> oldStats = m_stats;
     m_stats.clear();
 
     uint64_t currTime = m_eventBuffer.getCurrTime();
-
-    /*  if(bboxes.size() == 0) {
-          cv::Rect r;
-          r.x = 0;
-          r.y = 0;
-          r.width = DAVIS_IMG_WIDHT;
-          r.height = DAVIS_IMG_HEIGHT;
-          bboxes.push_back(r);
-      }*/
 
     std::vector<int> trackedRects;
     for(int i = 0; i < oldStats.size(); i++) {
@@ -271,7 +316,6 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         else if(currTime-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_US) {
             o.trackingLost = true;
             m_stats.push_back(o);
-            trackedRects.push_back(idx);
         }
     }
 
@@ -294,64 +338,6 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         m_stats.push_back(stats);
     }
 }
-bool compare_rect(const cv::Rect & a, const cv::Rect &b)
-{
-    return a.area() > b.area();
-}
-std::vector<cv::Rect> Processor::detect()
-{
-    // Compute image of current event buffer
-    cv::Mat bufferImg(cv::Size(DAVIS_IMG_WIDHT,DAVIS_IMG_HEIGHT), CV_8UC1);
-    bufferImg.setTo(cv::Scalar(0));
-    uchar* p;
-    auto & buff = m_eventBuffer.getLockedBuffer();
-    for(sDVSEventDepacked & e:buff) {
-        p = bufferImg.ptr<uchar>(e.y,e.x);
-        *p = 255;
-    }
-    m_eventBuffer.releaseLockedBuffer();
-
-    // Blur image
-    //cv::imwrite( "Image.jpg", bufferImg );
-    cv::GaussianBlur(bufferImg,bufferImg,
-                     cv::Size(TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ,TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ),
-                     TRACK_BOX_DETECTOR_GAUSS_SIGMA,TRACK_BOX_DETECTOR_GAUSS_SIGMA,cv::BORDER_REPLICATE);
-
-    //cv::imwrite( "blured.jpg", bufferImg );
-    // Treshold image
-    cv::threshold(bufferImg,bufferImg,TRACK_BOX_DETECTOR_THRESHOLD,255,CV_THRESH_BINARY);
-    //cv::imwrite( "threshold.jpg", bufferImg );
-    m_thresholdImg = QImage(bufferImg.cols,bufferImg.rows,QImage::Format_Grayscale8);
-    memcpy((void*)m_thresholdImg.bits(),(void*)bufferImg.ptr(),bufferImg.cols*bufferImg.rows);
-
-    // Find outline contours only
-    std::vector<std::vector<cv::Point> > contours;
-    cv::findContours(bufferImg,contours,CV_RETR_EXTERNAL,CV_CHAIN_APPROX_SIMPLE);
-
-    // Convert contours to bounding boxes
-    std::vector<cv::Rect> tmpBoxes,bboxes;
-    for(int i = 0; i < contours.size(); i++) {
-        cv::Rect r=cv::boundingRect(contours.at(i));
-        tmpBoxes.push_back(r);
-    }
-
-    // Sort by area
-    sort( tmpBoxes.begin(), tmpBoxes.end(), compare_rect );
-
-    for(int i = 0; i < qMin((int)tmpBoxes.size(), TRACK_BIGGEST_N_BOXES); i++) {
-        cv::Rect r=tmpBoxes.at(i);
-        // Expand bounding box
-        r.x = qMax(0.0,r.x+r.width*(1-TRACK_BOX_SCALE)/2);
-        r.y = qMax(0.0,r.y+r.height*(1-TRACK_BOX_SCALE)/2);
-        r.width = qMin(DAVIS_IMG_WIDHT - r.x - 1.0,r.width*TRACK_BOX_SCALE);
-        r.height = qMin(DAVIS_IMG_HEIGHT - r.y - 1.0,r.height*TRACK_BOX_SCALE);
-        if(r.area() >= TRACK_MIN_AREA) {
-            bboxes.push_back(r);
-        }
-    }
-    return bboxes;
-}
-
 void Processor::updateStatistics(uint32_t elapsedTimeUs)
 {
     // Update objects with new bounding box
@@ -362,8 +348,6 @@ void Processor::updateStatistics(uint32_t elapsedTimeUs)
     QMutexLocker locker(&m_statsMutex);
     tracking(bboxes);
     //printf("Track: %lld\n",t.nsecsElapsed()/1000);
-
-
 
     //t.restart();
     for(sObjectStats &stats:m_stats)
@@ -390,8 +374,6 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     st.deltaTimeLastDataUpdateUs += elapsedTimeUs;
 
     auto & buff = m_eventBuffer.getLockedBuffer();
-    // Recompute position and standard deviation
-    // if there are enough events in the buffer
 
     for(sDVSEventDepacked & e:buff) {
         if(!isInROI(e,st.roi))
@@ -418,11 +400,12 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     newStd /= evCnt;
     m_eventBuffer.releaseLockedBuffer();
 
-    // Compute velocity if last point was set
-    newVelocity.setX(1000000*(newCenter.x()-st.center.x())/st.deltaTimeLastDataUpdateUs);
-    newVelocity.setY(1000000*(newCenter.y()-st.center.y())/st.deltaTimeLastDataUpdateUs);
-
     if(!st.trackingLost) {
+
+        // Compute velocity if last point was set
+        newVelocity.setX(1000000*(newCenter.x()-st.center.x())/st.deltaTimeLastDataUpdateUs);
+        newVelocity.setY(1000000*(newCenter.y()-st.center.y())/st.deltaTimeLastDataUpdateUs);
+
         st.velocityHistory.push_back(newVelocity);
         if(st.velocityHistory.size()>STATS_SPEED_SMOOTHING_WINDOW_SZ) {
             st.velocityHistory.erase(st.velocityHistory.begin());
@@ -440,10 +423,11 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 
         st.velocityNorm = st.velocity/(2*newStd.y());
 
-        if(std::abs(st.velocityNorm.y()) > 2.5) {
-            //printf("High speed: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu, %d, %d\n",
-            //st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs,st.trackingLost,st.trackingPreviouslyLost);
-        }
+        /*if(std::abs(st.velocityNorm.y()) > 2.5) {
+            printf("High speed: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu, %d, %d\n",
+                   st.center.y(),newCenter.y(),st.velocityNorm.y(),
+                   st.deltaTimeLastDataUpdateUs,st.trackingLost,st.trackingPreviouslyLost);
+        }*/
 
         if(st.possibleFall) {
             //printf("Falling: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu\n",

@@ -9,7 +9,7 @@
 
 #include "simpletimeplot.h"
 
-#include "camerahandlerdavis.h"
+#include "camerahandler.h"
 #include "processor.h"
 
 #include "aspectratiopixmap.h"
@@ -45,7 +45,7 @@ private:
 private:
     Ui::MainWindow *ui;
     QTimer* timer;
-    CameraHandlerDavis camHandler;
+    CameraHandler camHandler;
     Processor proc;
     float m_uiRedrawFPS;
     QElapsedTimer m_realRedrawTimer;

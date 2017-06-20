@@ -77,7 +77,6 @@ void MainWindow::setupUI()
 
 void MainWindow::onPlayspeedChanged()
 {
-    qDebug("changed");
     camHandler.changePlaybackSpeed(ui->dsb_playspeed->value());
 }
 
@@ -98,6 +97,9 @@ void MainWindow::onClickPlaybackConnect()
         onPlayspeedChanged();
         ui->b_online_connect->setEnabled(false);
         ui->b_playback_connect->setText("stop");
+        plotEventsInWindow->clear();
+        plotSpeed->clear();
+        plotVerticalCentroid->clear();
 
         QVector2D sz = camHandler.getFrameSize();
         proc.start(sz.x(),sz.y());
@@ -121,6 +123,9 @@ void MainWindow::onClickOnlineConnect()
         }
         ui->b_playback_connect->setEnabled(false);
         ui->b_online_connect->setText("stop");
+        plotEventsInWindow->clear();
+        plotSpeed->clear();
+        plotVerticalCentroid->clear();
 
         QVector2D sz = camHandler.getFrameSize();
         proc.start(sz.x(),sz.y());
@@ -132,7 +137,8 @@ void MainWindow::onClickBrowsePlaybackFile()
 {
     QString fileName = QFileDialog::getOpenFileName(this,
                        tr("Open Playback file"), "/tausch/FallDetectionProjectRecords", tr("AEDAT files (*.aedat)"));
-    ui->l_playback_file->setText(fileName);
+    if(!fileName.isEmpty())
+        ui->l_playback_file->setText(fileName);
 }
 
 void MainWindow::redrawUI()
@@ -195,7 +201,11 @@ void MainWindow::redrawUI()
                 painter.setPen(penGreenSmall);
                 painter.drawRect(stats.roi);
                 if(idx < TRACK_BIGGEST_N_BOXES) {
-                    imgFalls[idx++]->setPixmap(QPixmap::fromImage(grayImg.copy(stats.roi.x(),stats.roi.y(),stats.roi.width(),stats.roi.height())));
+                    imgFalls[idx++]->setPixmap(QPixmap::fromImage(
+                                                   grayImg.copy(stats.roi.x(),
+                                                           stats.roi.y(),
+                                                           stats.roi.width(),
+                                                           stats.roi.height())));
                 }
             } else {
                 if(stats.trackingLost) {

@@ -54,7 +54,7 @@ public:
         std::vector<QPointF> velocityHistory;
         QPointF velocityNorm;
         QPointF std;
-        QRectF roi;
+        QRectF roi,prevRoi;
         QRectF stdDevBox;
         size_t evCnt;
         uint64_t lastROIUpdate, deltaTimeLastDataUpdateUs;

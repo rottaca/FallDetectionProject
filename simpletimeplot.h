@@ -54,6 +54,12 @@ public:
 
     void cleanupMap();
 
+    void clear()
+    {
+        QMutexLocker locker(&m_dataMutex);
+        m_data.clear();
+    }
+
 private:
     QRect drawFrame(QPainter *painter);
 

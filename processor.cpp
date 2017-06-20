@@ -60,24 +60,6 @@ void Processor::newEvent(const sDVSEventDepacked & event)
 void Processor::newFrame(const caerFrameEvent &frame)
 {
 
-#ifdef SIMULATE_CAMERA_INPUT
-    {
-        QMutexLocker locker(&m_frameMutex);
-        m_newFrameAvailable = true;
-        QImageReader imReader("testScaled.jpeg");
-        QImage img = imReader.read();
-        m_currFrame = QImage(img.size(),QImage::Format_Grayscale8);
-        // Convert to rgb888 image
-        for(int y = 0; y < img.height(); y++)
-        {
-            uchar* ptr = m_currFrame.scanLine(y);
-            uchar* inPtr = img.scanLine(y);
-            for(int x = 0; x < img.width(); x++) {
-                ptr[x] = (inPtr[4*x+2] + inPtr[4*x+1] + inPtr[4*x])/3;
-            }
-        }
-    }
-#else
     assert(frame->lengthX == m_sx);
     assert(frame->lengthY == m_sy);
     {
@@ -90,12 +72,26 @@ void Processor::newFrame(const caerFrameEvent &frame)
             ptr[i] = inPtr[i]>>8;
         }
     }
-#endif
 }
 
 void Processor::run()
 {
     printf("Processor started.\n");
+#ifndef NDEBUG
+    QString prevEv,prevFr,suff,numStr;
+    suff = ".png";
+    int i = 0;
+    prevEv = "fallEv";
+    prevFr = "fallFr";
+    numStr = QString("%1").arg(i++);
+    while(QFile(prevEv+numStr+suff).exists()) {
+        QFile(prevEv+numStr+suff).remove();
+        QFile(prevFr+numStr+suff).remove();
+
+        numStr = QString("%1").arg(i++);
+    }
+#endif
+
     m_updateStatsTimer.restart();
     //QElapsedTimer comTimer;
     //QElapsedTimer t,t2;
@@ -206,16 +202,30 @@ std::vector<cv::Rect> Processor::detect()
     }
     m_eventBuffer.releaseLockedBuffer();
 
-    // Blur image
-    //cv::imwrite( "Image.jpg", bufferImg );
+#ifndef NDEBUG
+    cv::imwrite( "0image.jpg", bufferImg );
+#endif
+
+    cv::Mat element = cv::getStructuringElement( cv::MORPH_OPEN, cv::Size( 3, 3 ));
+
+    cv::morphologyEx( bufferImg, bufferImg, cv::MORPH_OPEN, element );
+
+#ifndef NDEBUG
+    cv::imwrite( "1closed.jpg", bufferImg );
+#endif
+
     cv::GaussianBlur(bufferImg,bufferImg,
                      cv::Size(TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ,TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ),
                      TRACK_BOX_DETECTOR_GAUSS_SIGMA,TRACK_BOX_DETECTOR_GAUSS_SIGMA,cv::BORDER_REPLICATE);
 
-    //cv::imwrite( "blured.jpg", bufferImg );
+#ifndef NDEBUG
+    cv::imwrite( "2blurred.jpg", bufferImg );
+#endif
     // Treshold image
     cv::threshold(bufferImg,bufferImg,TRACK_BOX_DETECTOR_THRESHOLD,255,CV_THRESH_BINARY);
-    //cv::imwrite( "threshold.jpg", bufferImg );
+#ifndef NDEBUG
+    cv::imwrite( "3threshold.jpg", bufferImg );
+#endif
     m_thresholdImg = QImage(bufferImg.cols,bufferImg.rows,QImage::Format_Grayscale8);
     memcpy((void*)m_thresholdImg.bits(),(void*)bufferImg.ptr(),bufferImg.cols*bufferImg.rows);
 
@@ -233,6 +243,9 @@ std::vector<cv::Rect> Processor::detect()
     // Sort by area
     sort( tmpBoxes.begin(), tmpBoxes.end(), compare_rect );
 
+    cv::Rect imgWithoutBorder(TRACK_IMG_BORDER_SIZE,TRACK_IMG_BORDER_SIZE,
+                              bufferImg.cols-2*TRACK_IMG_BORDER_SIZE, bufferImg.rows-2*TRACK_IMG_BORDER_SIZE);
+
     for(int i = 0; i < qMin((int)tmpBoxes.size(), TRACK_BIGGEST_N_BOXES); i++) {
         cv::Rect r=tmpBoxes.at(i);
         // Expand bounding box
@@ -240,7 +253,7 @@ std::vector<cv::Rect> Processor::detect()
         r.y = qMax(0.0,r.y+r.height*(1-TRACK_BOX_SCALE)/2);
         r.width = qMin(m_sx - r.x - 1.0,r.width*TRACK_BOX_SCALE);
         r.height = qMin(m_sy - r.y - 1.0,r.height*TRACK_BOX_SCALE);
-        if(r.area() >= TRACK_MIN_AREA) {
+        if(r.area() >= TRACK_MIN_AREA && ((r & imgWithoutBorder).area() > 0)) {
             bboxes.push_back(r);
         }
     }
@@ -300,21 +313,33 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
             const cv::Rect& r = bboxes.at(idx);
 
             o.trackingLost = false;
-            /* o.roi = QRectF(o.roi.x()*0.8+0.2*r.x,
-                            o.roi.y()*0.8+0.2*r.y,
-                            o.roi.width()*0.8+0.2*r.width,
-                            o.roi.height()*0.8+0.2*r.height);*/
-            o.roi = QRectF(r.x,
-                           r.y,
-                           r.width,
-                           r.height);
+
+            QRectF newROI(r.x,
+                          r.y,
+                          r.width,
+                          r.height);
+            if(o.trackingLost) {
+                o.prevRoi = newROI;
+            } else {
+                o.prevRoi = o.prevRoi;
+            }
+
+            o.roi = newROI;
             o.lastROIUpdate = currTime;
             m_stats.push_back(o);
             trackedRects.push_back(idx);
         }
         // ROI not found but still really new ?
-        else if(currTime-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_US) {
+        // possible fall ?
+        else if(o.possibleFall && currTime-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_FALL_US) {
             o.trackingLost = true;
+            o.prevRoi = o.roi;
+            m_stats.push_back(o);
+        }
+        // No fall
+        else if(!o.possibleFall && currTime-o.lastROIUpdate < TRACK_DELAY_KEEP_ROI_US) {
+            o.trackingLost = true;
+            o.prevRoi = o.roi;
             m_stats.push_back(o);
         }
     }
@@ -334,6 +359,7 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         sObjectStats stats;
         stats.id = m_nextId++;
         stats.roi = QRectF(r.x,r.y,r.width,r.height);
+        stats.prevRoi = stats.roi;
         stats.lastROIUpdate = currTime;
         m_stats.push_back(stats);
     }
@@ -436,10 +462,30 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
                 st.possibleFall = false;
             }
         } else if(newCenter.y() > FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL &&
-                  st.velocityNorm.y() > FALL_DETECTOR_Y_SPEED_THRESHOLD) {
+                  st.velocityNorm.y() >= FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD &&
+                  st.velocityNorm.y() <= FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD) {
             st.possibleFall = true;
-            printf("Fall detected: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu\n",
+            printf("Fall detected: PrevCenter: %f, Center: %f, Speed (norm): %f, Time: %lu\n",
                    st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs);
+
+#ifndef NDEBUG
+            QImage img = m_eventBuffer.toImage();
+            QRect roi = QRect(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
+            QString prevEv,prevFr,suff,numStr;
+            suff = ".png";
+            int i = 0;
+            prevEv = "fallEv";
+            prevFr = "fallFr";
+
+            do {
+                numStr = QString("%1").arg(i++);
+            } while(QFile(prevEv+numStr+suff).exists());
+            img.copy(roi).save(prevEv+numStr+suff);
+            {
+                QMutexLocker locker(&m_frameMutex);
+                m_currFrame.copy(roi).save(prevFr+numStr+suff);
+            }
+#endif
         }
     } else {
         st.velocity.setX(0);
@@ -452,16 +498,6 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     st.std = newStd;
     st.evCnt = evCnt;
     st.deltaTimeLastDataUpdateUs = 0;
-
-    /* } else {
-         // No velocity detected
-         st.std = QPointF(0,0);
-         st.evCnt = evCnt;
-         st.velocity = QPointF(0,0);
-         st.velocityNorm = QPointF(0,0);
-         st.skippedLastUpdate = true;
-         st.centerInitiallyComputed = false;
-     }*/
 
     st.stdDevBox.setX(st.center.x()-st.std.x());
     st.stdDevBox.setY(st.center.y()-st.std.y());

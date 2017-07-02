@@ -29,8 +29,22 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     bool skippedFirst = false;
     double dx = m_xMax-m_xMin;
     double dy = m_yMax-m_yMin;
+    QVector<QLineF> sepLines;
 
     for(auto const& p: m_data) {
+        // y = INF ?
+        if(p.second > std::numeric_limits<qreal>::max() ) {
+            // Horizontal line
+            x = plotFrame.x()+(p.first - m_xMin)/dx*plotFrame.width();
+
+            sepLines.append(QLineF(x,plotFrame.y(),x,plotFrame.y()+plotFrame.height()));
+            lastPoint.setX(0);
+            lastPoint.setY(0);
+            isOutside = false;
+            skippedFirst = false;
+            continue;
+        }
+
         x = plotFrame.x()+(p.first - m_xMin)/dx*plotFrame.width();
         y = plotFrame.y()+(1-(p.second - m_yMin)/dy)*plotFrame.height(); // Flip y axis
 
@@ -78,6 +92,8 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     }
 
     painter.drawLines(lines);
+    painter.setPen(QPen(Qt::blue,2));
+    painter.drawLines(sepLines);
 
     // Print value next to line end
     QFontMetrics fm = painter.fontMetrics();

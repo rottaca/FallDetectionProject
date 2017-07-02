@@ -60,10 +60,13 @@ public:
         uint64_t lastROIUpdate, deltaTimeLastDataUpdateUs;
         uint32_t id;
         bool trackingLost;
-        bool possibleFall;
+        bool possibleFall, confirmendFall;
         bool trackingPreviouslyLost;
+
+        cv::Mat roiHist;
         sObjectStats()
         {
+            confirmendFall = false;
             possibleFall = false;
             trackingLost = true;
             trackingPreviouslyLost = true;
@@ -72,6 +75,7 @@ public:
             lastROIUpdate = 0;
             deltaTimeLastDataUpdateUs = 0;
         }
+
     } sObjectStats;
 
     QVector<sObjectStats> getStats()
@@ -127,6 +131,7 @@ private:
     bool m_newFrameAvailable;
     QFuture<void> m_futureAnyncPedestrianDetector;
     u_int32_t m_nextId;
+    cv::CascadeClassifier m_casscadeClassifier;
 
     // Time in us
     int m_timewindow;
@@ -136,6 +141,7 @@ private:
     QMutex m_statsMutex;
     QVector<sObjectStats> m_stats;
     float m_currProcFPS;
-    QImage m_thresholdImg;
+    QImage m_thresholdImg,m_blurredImg;
+    cv::Mat m_bufferImg,m_bufferImgSmooth;
 };
 #endif // PROCESSOR_H

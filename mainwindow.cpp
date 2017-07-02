@@ -170,14 +170,17 @@ void MainWindow::redrawUI()
 
         if(statsList.size() > 0) {
             Processor::sObjectStats stats = statsList.at(0);
+            lastObjId = stats.id;
             plotEventsInWindow->addPoint(time,stats.evCnt);
             plotVerticalCentroid->addPoint(time,stats.center.y());
             plotSpeed->addPoint(time,stats.velocityNorm.y());
         } else {
-            plotEventsInWindow->addPoint(time,nan(""));
-            plotVerticalCentroid->addPoint(time,nan(""));
-            plotSpeed->addPoint(time,nan(""));
-
+            if(lastObjId != -1) {
+                plotEventsInWindow->addPoint(time,INFINITY);
+                plotVerticalCentroid->addPoint(time,INFINITY);
+                plotSpeed->addPoint(time,INFINITY);
+            }
+            lastObjId = -1;
         }
         plotEventsInWindow->update();
         plotVerticalCentroid->update();
@@ -188,6 +191,7 @@ void MainWindow::redrawUI()
 
         QPen penGreen(Qt::green,4);
         QPen penGreenSmall(Qt::green,1);
+        QPen penOrangeSmall(QColor(255,69,0),1);
 
         QImage grayImg = proc.getImg();
         QImage bufferImg = buff.toImage();
@@ -197,7 +201,7 @@ void MainWindow::redrawUI()
 
         int idx = 0;
         for(Processor::sObjectStats stats: statsList) {
-            if(stats.possibleFall) {
+            if(stats.confirmendFall) {
                 painter.setPen(penGreenSmall);
                 painter.drawRect(stats.roi);
                 if(idx < TRACK_BIGGEST_N_BOXES) {
@@ -207,6 +211,9 @@ void MainWindow::redrawUI()
                                                            stats.roi.width(),
                                                            stats.roi.height())));
                 }
+            } else if(stats.possibleFall) {
+                painter.setPen(penOrangeSmall);
+                painter.drawRect(stats.roi);
             } else {
                 if(stats.trackingLost) {
                     if(ui->cb_showLostTracking->isChecked())
@@ -219,7 +226,8 @@ void MainWindow::redrawUI()
             }
 
             painter.setPen(penRed);
-            painter.drawRect(stats.stdDevBox);
+            painter.drawLine(stats.center - QPointF(stats.std.x(),0), stats.center + QPointF(stats.std.x(),0));
+            painter.drawLine(stats.center - QPointF(0,stats.std.y()), stats.center + QPointF(0,stats.std.y()));
 
             painter.setPen(penGreen);
             painter.drawPoint(stats.center);

@@ -219,10 +219,10 @@ void CameraHandler::writeConfig()
 
     // Send the default configuration before using the device.
     // No configuration is sent automatically!
-    caerDeviceSendDefaultConfig(m_davisHandle);
+    //caerDeviceSendDefaultConfig(m_davisHandle);
 
     // Enable autoexposure
-    caerDeviceConfigSet(m_davisHandle, DAVIS_CONFIG_APS, DAVIS_CONFIG_APS_AUTOEXPOSURE, true);
+    //caerDeviceConfigSet(m_davisHandle, DAVIS_CONFIG_APS, DAVIS_CONFIG_APS_AUTOEXPOSURE, true);
 
     // Tweak some biases, to increase bandwidth in this case.
 //    struct caer_bias_coarsefine coarseFineBias;

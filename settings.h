@@ -29,7 +29,7 @@
 #define TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ (TRACK_BOX_DETECTOR_GAUSS_SIGMA*2+1)
 // Threshold for binarizing the resulting smoothed image
 // Lower values expand the contour, higher values are closer to the original shape
-#define TRACK_BOX_DETECTOR_THRESHOLD (255*0.05)
+#define TRACK_BOX_DETECTOR_THRESHOLD (255*0.04)
 
 // Ratio between overlap of bounding boxes
 // and size of old box: How high has the overlap to be
@@ -38,9 +38,9 @@
 // Optional scaling factor for detected bounding boxes
 #define TRACK_BOX_SCALE 1.1
 // Minimum area of bouding boxes to remove noise
-#define TRACK_MIN_AREA (40*40)
+#define TRACK_MIN_AREA (50*50)
 // Assume only N subjects in the scene and remove all smaller boxes before tracking
-#define TRACK_BIGGEST_N_BOXES 5
+#define TRACK_BIGGEST_N_BOXES 3
 // An object has to be at least with some parts inside the inner image region inside
 // the defined boundary, otherwise the detected rectangle is ignored. This reduces false alarms
 #define TRACK_IMG_BORDER_SIZE (50)

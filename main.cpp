@@ -11,9 +11,14 @@ int main(int argc, char *argv[])
     setbuf(stdout, NULL);
     QApplication a(argc, argv);
     MainWindow w;
-    w.show();
+
+    QStringList args = QCoreApplication::arguments();
+    if(args.size() == 2) {
+        w.showMinimized();
+        w.playFile(args.at(1));
+    } else {
+        w.show();
+    }
 
     return a.exec();
-
-    return 0;
 }

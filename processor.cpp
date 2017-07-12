@@ -19,7 +19,7 @@ Processor::Processor():
     m_currProcFPS = 0;
     m_currFrameFPS = 0;
 
-    if(!m_casscadeClassifier.load("cascade.xml")) {
+    if(!m_cascadeClassifier.load("cascade.xml")) {
         std::cerr << "Failded to load classifier" << std::endl;
         exit(1);
     }
@@ -61,7 +61,6 @@ void Processor::newEvent(const sDVSEventDepacked & event)
     {
         QMutexLocker locker(&m_queueMutex);
         m_eventQueue.push(event);
-        //printf("%d %d %d\n",event.x,event.y,m_eventQueue.size());
     }
 }
 
@@ -84,26 +83,7 @@ void Processor::newFrame(const caerFrameEvent &frame)
 
 void Processor::run()
 {
-    printf("Processor started.\n");
-#ifndef NDEBUG
-    /* QString prevEv,prevFr,suff,numStr;
-     suff = ".png";
-     int i = 0;
-     prevEv = "fallEv";
-     prevFr = "fallFr";cd
-     numStr = QString("%1").arg(i++);
-     while(QFile(prevEv+numStr+suff).exists()) {
-         QFile(prevEv+numStr+suff).remove();
-         QFile(prevFr+numStr+suff).remove();
-
-         numStr = QString("%1").arg(i++);
-     }*/
-#endif
-
     m_updateStatsTimer.restart();
-    //QElapsedTimer comTimer;
-    //QElapsedTimer t,t2;
-    //t.start();
     while (m_isRunning) {
 
         // Check if anything has to be done
@@ -115,34 +95,22 @@ void Processor::run()
             QThread::usleep(qMax(0LL,m_updateStatsInterval-m_updateStatsTimer.nsecsElapsed()/1000));
         }
 
-        // Process data
-        //printf("Tasks: %lu %d %lld\n",m_eventQueue.size(), m_newFrameAvailable,m_updateStatsTimer.nsecsElapsed()/1000);
-
         // Process events and add them to the buffer
         // Remove old ones if necessary
-        // t2.start();
         if(m_eventQueue.size()>0) {
             QMutexLocker locker(&m_queueMutex);
             m_eventBuffer.addEvents(m_eventQueue);
         }
-        //t2.restart();
         // Recompute buffer stats
         if(m_updateStatsTimer.nsecsElapsed()/1000 > m_updateStatsInterval) {
-            //printf("Update: %u",elapsedTime);
 
             m_currProcFPS = (1.0f-FPS_LOWPASS_FILTER_COEFF)*m_currProcFPS +
                             FPS_LOWPASS_FILTER_COEFF*1000.0f/m_updateStatsTimer.elapsed();
-
-            //printf("FPS: %f %f\n",m_currProcFPS, 1000000000.0f/m_updateStatsTimer.nsecsElapsed());
-            //printf("Elapsed: %lld instead of %d\n",m_updateStatsTimer.nsecsElapsed()/1000, m_updateStatsInterval);
             uint64_t elapsedTime = m_updateStatsTimer.nsecsElapsed()/1000;
             m_updateStatsTimer.restart();
             updateStatistics(elapsedTime);
-            //printf("Update done.\n");
         }
-        //printf("Event Update: %lld\n",t2.nsecsElapsed()/1000);
-        // Process frame
-        if(m_newFrameAvailable && m_futureAnyncPedestrianDetector.isFinished()) {
+        if(m_newFrameAvailable) {
             {
                 QMutexLocker locker(&m_frameMutex);
                 m_currFrameFPS = (1.0f-FPS_LOWPASS_FILTER_COEFF)*m_currFrameFPS+
@@ -150,47 +118,10 @@ void Processor::run()
                 m_frameTimer.restart();
                 m_newFrameAvailable = false;
             }
-            // Execute face detection in different thread
-            //m_futureAnyncPedestrianDetector = QtConcurrent::run(this, &Processor::processImage);
         }
-        //printf("Stats Update: %lld\n",t2.nsecsElapsed()/1000);
-
-        //printf("Update: %lld\n",t.nsecsElapsed()/1000);
-        //t.restart();
-        //printf("%lld\n",comTimer.nsecsElapsed());
     }
 
     printf("Processor stopped.\n");
-}
-
-void Processor::processImage()
-{
-    QThread::currentThread()->setPriority(QThread::LowestPriority);
-    std::vector<cv::Rect> roi_humans;
-    {
-        QMutexLocker locker(&m_frameMutex);
-        m_newFrameAvailable = false;
-        // Source: http://www.magicandlove.com/blog/2011/08/26/people-detection-in-opencv-again/
-        cv::HOGDescriptor hog;
-        hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
-
-        cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
-                      CV_8UC1, m_currFrame.bits(), m_currFrame.bytesPerLine());
-
-        std::vector<cv::Rect> found;
-        hog.detectMultiScale(image, found,0,cv::Size(6,6),cv::Size(32,64),1.2);
-
-        size_t i, j;
-        for (i=0; i<found.size(); i++) {
-            cv::Rect r = found[i];
-            for (j=0; j<found.size(); j++)
-                if (j!=i && (r & found[j])==r)
-                    break;
-            if (j==found.size()) {
-                roi_humans.push_back(r);
-            }
-        }
-    }
 }
 
 bool compare_rect(const cv::Rect & a, const cv::Rect &b)
@@ -210,63 +141,38 @@ std::vector<cv::Rect> Processor::detect()
     }
     m_eventBuffer.releaseLockedBuffer();
 
-#ifndef NDEBUG
-    cv::imwrite( "0image.jpg", m_bufferImg );
-#endif
     if(TRACK_OPENING_KERNEL_SZ > 1) {
         cv::Mat element = cv::getStructuringElement( cv::MORPH_OPEN, cv::Size( TRACK_OPENING_KERNEL_SZ, TRACK_OPENING_KERNEL_SZ ));
 
         cv::morphologyEx( m_bufferImg, m_bufferImg, cv::MORPH_OPEN, element );
 
-#ifndef NDEBUG
-        cv::imwrite( "1opened.jpg", m_bufferImg );
-#endif
     }
 
     cv::GaussianBlur(m_bufferImg,m_bufferImg,
                      cv::Size(TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ,TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ),
                      TRACK_BOX_DETECTOR_GAUSS_SIGMA,TRACK_BOX_DETECTOR_GAUSS_SIGMA,cv::BORDER_REPLICATE);
-
-    m_bufferImgSmooth = m_bufferImg.clone();
-
-
-    if(m_blurredImg.isNull()) {
-        m_blurredImg = QImage(m_bufferImg.cols,m_bufferImg.rows,QImage::Format_Grayscale8);
-        m_blurredImg.fill(0);
+    if(m_smoothBufferImg.empty()) {
+        m_smoothBufferImg = m_bufferImg;
+        m_smoothBufferImg.setTo(0);
     }
 
-#ifndef NDEBUG
-    cv::imwrite( "2a_rawBlurred.jpg", m_bufferImg );
-    m_blurredImg.save("2b_smoothBlurred.jpg");
-#endif
+    uchar* bPtr = m_bufferImg.ptr();
+    uchar* sPtr = m_smoothBufferImg.ptr();
 
-    uchar* pBlurred = m_blurredImg.bits();
-    uchar* pBuffer = m_bufferImg.ptr<uchar>();
     for(int i = 0; i < m_bufferImg.cols*m_bufferImg.rows; i++) {
-        *pBuffer = 0*(*pBlurred)+1*(*pBuffer);
-        uchar tmp = *pBuffer;
-        *pBlurred = tmp;
-        pBuffer++;
-        pBlurred++;
+        *bPtr = 0.6*(*bPtr)+0.4*(*sPtr);
+        *sPtr = *bPtr;
+        bPtr++;
+        sPtr++;
     }
 
-#ifndef NDEBUG
-    cv::imwrite( "2c_avgBlurred.jpg", m_bufferImg );
-#endif
-    /*cv::Mat blurredImg(cv::Size(m_sx,m_sy),CV_8UC1,m_blurredImg.bits());
-    cv::Mat res = 0.4*blurredImg+0.6*bufferImg;
-    res.copyTo(bufferImg);
-    */
     // Treshold image
     cv::threshold(m_bufferImg,m_bufferImg,TRACK_BOX_DETECTOR_THRESHOLD,255,CV_THRESH_BINARY);
-#ifndef NDEBUG
-    cv::imwrite( "3threshold.jpg", m_bufferImg );
-#endif
+
 
     if(m_thresholdImg.isNull())
         m_thresholdImg = QImage(m_bufferImg.cols,m_bufferImg.rows,QImage::Format_Grayscale8);
     memcpy((void*)m_thresholdImg.bits(),(void*)m_bufferImg.ptr(),m_bufferImg.cols*m_bufferImg.rows);
-
 
     // Find outline contours only
     std::vector<std::vector<cv::Point> > contours;
@@ -319,60 +225,9 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
 
     uint64_t currTime = m_eventBuffer.getCurrTime();
 
-    int hbins = 30;
-    int histSize[] = {hbins};
-    // Ignore background zeros
-    float hranges[] = { 1, 256 };
-    const float* ranges[] = { hranges };
-
-    // we compute the histogram from the 0-th channels
-    int channels[] = {0};
-
-
-
     std::vector<int> trackedRects;
     for(int i = 0; i < oldStats.size(); i++) {
         sObjectStats o = oldStats.at(i);
-
-        /*cv::Mat backProj;
-        cv::calcBackProject(&m_bufferImgSmooth,1,channels,o.roiHist,backProj,ranges);
-
-        cv::Mat copyImg = m_bufferImgSmooth.clone();
-        cv::cvtColor(copyImg, copyImg, CV_GRAY2BGR);
-
-        cv::Rect cvRoi(o.roi.x(),o.roi.y(),o.roi.width(),o.roi.height());
-        cv::rectangle(copyImg,cvRoi, cv::Scalar(255,0,0));
-
-        cv::meanShift(backProj,cvRoi,cv::TermCriteria(cv::TermCriteria::COUNT, 100,10));
-        cv::rectangle(copyImg,cvRoi, cv::Scalar(0,255,0));
-
-        o.roi = QRectF(cvRoi.x,cvRoi.y,cvRoi.width,cvRoi.height);
-
-        cv::Mat mask(m_bufferImgSmooth.size(), CV_8UC1, cv::Scalar::all(0));
-        mask(cvRoi).setTo(cv::Scalar::all(255));
-
-
-        cv::calcHist(&m_bufferImgSmooth, 1, channels, mask, // do not use mask
-                     o.roiHist, 1, histSize, ranges,
-                     true, // the histogram is uniform
-                     false );
-
-        cv::normalize(o.roiHist, o.roiHist, 0, 255, cv::NORM_MINMAX);
-
-        int hist_h = 200,hist_w = 1200;
-        cv::Mat histImage( hist_h, hist_w, CV_8UC3, cv::Scalar( 0,0,0) );
-
-        int bin_w = cvRound( (double) hist_w/hbins );
-
-        /// Draw for each channel
-        for( int i = 1; i < hbins; i++ ) {
-            cv::line( histImage, cv::Point( bin_w*(i-1), hist_h - cvRound(o.roiHist.at<float>(i-1))*hist_h/255 ),
-                      cv::Point( bin_w*(i), hist_h - cvRound(o.roiHist.at<float>(i))*hist_h/255 ),
-                      cv::Scalar( 255, 255, 255), 2, 8, 0  );
-        }
-
-        */
-        std::stringstream ss;
 
         float oXR = o.roi.x()+o.roi.width();
         float oXL = o.roi.x();
@@ -427,8 +282,6 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
             } else {
                 o.prevRoi = o.prevRoi;
             }
-//            cv::Rect cvNewRoi(newROI.x(),newROI.y(),newROI.width(),newROI.height());
-//            cv::rectangle(copyImg,cvNewRoi, cv::Scalar(0,0,255));
 
             o.roi = newROI;
             o.lastROIUpdate = currTime;
@@ -448,30 +301,6 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
             o.prevRoi = o.roi;
             m_stats.push_back(o);
         }
-
-
-#ifndef NDEBUG
-        /*       ss << "hist";
-               ss << o.id;
-               ss << ".jpg";
-               cv::imwrite( ss.str(), histImage );
-               ss.str("");
-               ss << "img";
-               ss << o.id;
-               ss << ".jpg";
-               cv::imwrite( ss.str(), copyImg );
-               ss.str("");
-               ss << "mask";
-               ss << o.id;
-               ss << ".jpg";
-               cv::imwrite( ss.str(), mask );
-               ss.str("");
-               ss << "back";
-               ss << o.id;
-               ss << ".jpg";
-               cv::imwrite( ss.str(), backProj );*/
-#endif
-
     }
 
     // Add all missing rois
@@ -492,49 +321,6 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         stats.prevRoi = stats.roi;
         stats.lastROIUpdate = currTime;
 
-        /*  cv::Mat mask(m_bufferImgSmooth.size(), CV_8UC1, cv::Scalar::all(0));
-          cv::Rect cvRoi(stats.roi.x(),stats.roi.y(),stats.roi.width(),stats.roi.height());
-          mask(cvRoi).setTo(cv::Scalar::all(255));
-
-
-          cv::calcHist(&m_bufferImgSmooth, 1, channels, mask, // do not use mask
-                       stats.roiHist, 1, histSize, ranges,
-                       true, // the histogram is uniform
-                       false );
-
-          cv::normalize(stats.roiHist, stats.roiHist, 0, 255, cv::NORM_MINMAX);
-
-          int hist_h = 200,hist_w = 1200;
-          cv::Mat histImage( hist_h, hist_w, CV_8UC3, cv::Scalar( 0,0,0) );
-
-          int bin_w = cvRound( (double) hist_w/hbins );
-
-          /// Draw for each channel
-          for( int i = 1; i < hbins; i++ ) {
-              cv::line( histImage, cv::Point( bin_w*(i-1), hist_h - cvRound(stats.roiHist.at<float>(i-1))*hist_h/255 ),
-                        cv::Point( bin_w*(i), hist_h - cvRound(stats.roiHist.at<float>(i))*hist_h/255 ),
-                        cv::Scalar( 255, 255, 255), 2, 8, 0  );
-          }
-        */
-#ifndef NDEBUG
-        /*
-        std::stringstream ss;
-        ss << "hist";
-        ss << stats.id;
-        ss << ".jpg";
-        cv::imwrite( ss.str(), histImage );
-        ss.str("");
-        ss << "img";
-        ss << stats.id;
-        ss << ".jpg";
-        cv::imwrite( ss.str(), m_bufferImgSmooth(cvRoi) );
-        ss.str("");
-        ss << "mask";
-        ss << stats.id;
-        ss << ".jpg";
-        cv::imwrite( ss.str(), mask );*/
-#endif
-
         m_stats.push_back(stats);
     }
 }
@@ -542,14 +328,10 @@ void Processor::updateStatistics(uint32_t elapsedTimeUs)
 {
     // Update objects with new bounding box
     std::vector<cv::Rect> bboxes = detect();
-    //printf("Detect: %lld\n",t.nsecsElapsed()/1000);
-    //t.restart();
 
     QMutexLocker locker(&m_statsMutex);
     tracking(bboxes);
-    //printf("Track: %lld\n",t.nsecsElapsed()/1000);
 
-    //t.restart();
     for(sObjectStats &stats:m_stats)
         updateObjectStats(stats, elapsedTimeUs);
 
@@ -572,7 +354,7 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 
     // accumulate time
     st.deltaTimeLastDataUpdateUs += elapsedTimeUs;
-
+    uint32_t currTime = m_eventBuffer.getCurrTime();
     auto & buff = m_eventBuffer.getLockedBuffer();
 
     for(sDVSEventDepacked & e:buff) {
@@ -622,34 +404,15 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
         st.velocity /= weightSum;
 
         st.velocityNorm = st.velocity/(2*newStd.y());
-        //st.velocityNorm = st.velocity/(2*st.roi.height());
-
-        /*if(std::abs(st.velocityNorm.y()) > 2.5) {
-            printf("High speed: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu, %d, %d\n",
-                   st.center.y(),newCenter.y(),st.velocityNorm.y(),
-                   st.deltaTimeLastDataUpdateUs,st.trackingLost,st.trackingPreviouslyLost);
-        }*/
 
         if(st.possibleFall) {
-            //printf("Falling: PrevCenter: %f, Center: %f, Speed: %f, Time: %lu\n",
-            //       st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs);
             if(newCenter.y() < FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL) {
                 st.possibleFall = false;
                 st.confirmendFall = false;
-            } else if(!st.confirmendFall) {
-                std::vector<cv::Rect> detectedObjects;
-                {
-                    QMutexLocker locker(&m_frameMutex);
-                    cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
-                                  CV_8UC1, m_currFrame.bits(), m_currFrame.bytesPerLine());
-
-                    cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
-
-                    m_casscadeClassifier.detectMultiScale( image(cvRoi), detectedObjects, 1.1, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
-                }
-                if(detectedObjects.size() > 0) {
-                    printf("Fall detected: PrevCenter: %f, Center: %f, Speed (norm): %f, Time: %lu, Ev/Area: %f\n",
-                           st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs,(st.roi.width()*st.roi.height())/(float)evCnt);
+            } else if(!st.confirmendFall && m_newFrameAvailable) {
+                cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
+                if(findFallingPersonInROI(cvRoi)) {
+                    printf("%04u, [Fall]: Delayed detected, Speed (norm): %f, Time: %u\n",st.id, st.velocityNorm.y(),currTime);
                     st.confirmendFall = true;
                 }
             }
@@ -658,26 +421,14 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
                   st.velocityNorm.y() <= FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD) {
             st.possibleFall = true;
 
-            std::vector<cv::Rect> detectedObjects;
-            {
-                QMutexLocker locker(&m_frameMutex);
-                cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
-                              CV_8UC1, m_currFrame.bits(), m_currFrame.bytesPerLine());
-
-                cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
-
-                m_casscadeClassifier.detectMultiScale( image(cvRoi), detectedObjects, 1.1, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
-            }
-            if(detectedObjects.size() > 0) {
-                printf("Fall detected: PrevCenter: %f, Center: %f, Speed (norm): %f, Time: %lu, Ev/Area: %f\n",
-                       st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs,(st.roi.width()*st.roi.height())/(float)evCnt);
+            cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
+            if(findFallingPersonInROI(cvRoi)) {
+                printf("%04u, [Fall]: Directly detected, Speed (norm): %f, Time: %u\n",st.id, st.velocityNorm.y(),currTime);
                 st.confirmendFall = true;
 
             } else {
-                printf("Possible fall detected but no human found: PrevCenter: %f, Center: %f, Speed (norm): %f, Time: %lu, Ev/Area: %f\n",
-                       st.center.y(),newCenter.y(),st.velocityNorm.y(),st.deltaTimeLastDataUpdateUs,(st.roi.width()*st.roi.height())/(float)evCnt);
+                printf("%04u, [Fall]: Possibly detected but no human found, Speed (norm): %f, Time: %u\n",st.id, st.velocityNorm.y(),currTime);
             }
-
         }
     } else {
         st.velocity.setX(0);
@@ -685,27 +436,6 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
         st.velocityNorm.setX(0);
         st.velocityNorm.setY(0);
     }
-
-#ifndef NDEBUG
-    if(st.possibleFall && m_newFrameAvailable) {
-        QImage img = m_eventBuffer.toImage();
-        QRect roi = QRect(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
-        QString prevEv,prevFr,suff,numStr;
-        suff = ".png";
-        int i = 0;
-        prevEv = "fallEv";
-        prevFr = "fallFr";
-
-        do {
-            numStr = QString("%1").arg(i++);
-        } while(QFile(prevEv+numStr+suff).exists());
-        img.copy(roi).save(prevEv+numStr+suff);
-        {
-            QMutexLocker locker(&m_frameMutex);
-            m_currFrame.copy(roi).save(prevFr+numStr+suff);
-        }
-    }
-#endif
 
     st.center = newCenter;
     st.std = newStd;
@@ -717,4 +447,15 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     st.stdDevBox.setWidth(2*st.std.x()+1);
     st.stdDevBox.setHeight(2*st.std.y()+1);
 
+}
+
+bool Processor::findFallingPersonInROI(cv::Rect roi)
+{
+    std::vector<cv::Rect> detectedObjects;
+    QMutexLocker locker(&m_frameMutex);
+    cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
+                  CV_8UC1, m_currFrame.bits(), m_currFrame.bytesPerLine());
+
+    m_cascadeClassifier.detectMultiScale( image(roi), detectedObjects, 1.1, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
+    return detectedObjects.size() > 0;
 }

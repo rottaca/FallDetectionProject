@@ -29,8 +29,13 @@ public:
 
     void closeEvent (QCloseEvent *event);
 
+    void playFile(QString fileName);
 
-    bool processingStopped;
+    void callbackProcessingStopped()
+    {
+        processingStopped = true;
+    }
+
 
 public slots:
     void redrawUI();
@@ -54,6 +59,8 @@ private:
     SimpleTimePlot *plotSpeed;
     int lastObjId;
     AspectRatioPixmap * imgFalls[TRACK_BIGGEST_N_BOXES];
+    bool  exitAfterPlayback;
+    bool processingStopped;
 
 };
 

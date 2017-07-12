@@ -12,7 +12,7 @@
 void callbackPlaybackStopped(void * p)
 {
     MainWindow *w = (MainWindow*)p;
-    w->processingStopped = true;
+    w->callbackProcessingStopped();
 }
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -29,6 +29,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->dsb_playspeed,SIGNAL(editingFinished()),this,SLOT(onPlayspeedChanged()));
 
     processingStopped = false;
+    exitAfterPlayback = false;
 
     camHandler.setDVSEventReciever(&proc);
     camHandler.setFrameReciever(&proc);
@@ -151,6 +152,8 @@ void MainWindow::redrawUI()
         ui->b_online_connect->setEnabled(true);
         ui->b_playback_connect->setText("playback");
         ui->b_online_connect->setText("online");
+        if(exitAfterPlayback)
+            QApplication::quit();
     }
 
     uint32_t elapsedTime = m_realRedrawTimer.nsecsElapsed()/1000;
@@ -269,4 +272,12 @@ void MainWindow::redrawUI()
     } else {
         ui->l_status->setText(QString("GUI FPS: %2").arg(m_uiRedrawFPS,0,'g',3));
     }
+}
+void MainWindow::playFile(QString fileName)
+{
+    if(!fileName.isEmpty())
+        ui->l_playback_file->setText(fileName);
+    exitAfterPlayback = true;
+
+    onClickPlaybackConnect();
 }

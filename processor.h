@@ -114,6 +114,8 @@ private:
     std::vector<cv::Rect> detect();
     void tracking(std::vector<cv::Rect> &bboxes);
 
+    bool findFallingPersonInROI(cv::Rect roi);
+
 private:
     std::atomic_bool m_isRunning;
     QFuture<void> m_future;
@@ -129,9 +131,8 @@ private:
     QElapsedTimer m_frameTimer;
     QImage m_currFrame;
     bool m_newFrameAvailable;
-    QFuture<void> m_futureAnyncPedestrianDetector;
     u_int32_t m_nextId;
-    cv::CascadeClassifier m_casscadeClassifier;
+    cv::CascadeClassifier m_cascadeClassifier;
 
     // Time in us
     int m_timewindow;
@@ -141,7 +142,7 @@ private:
     QMutex m_statsMutex;
     QVector<sObjectStats> m_stats;
     float m_currProcFPS;
-    QImage m_thresholdImg,m_blurredImg;
-    cv::Mat m_bufferImg,m_bufferImgSmooth;
+    QImage m_thresholdImg;
+    cv::Mat m_bufferImg, m_smoothBufferImg;
 };
 #endif // PROCESSOR_H

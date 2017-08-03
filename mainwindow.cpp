@@ -21,6 +21,8 @@ MainWindow::MainWindow(QWidget *parent) :
     m_uiRedrawFPS(0)
 {
     ui->setupUi(this);
+
+
     setupUI();
 
     connect(ui->b_online_connect,SIGNAL(clicked()),this,SLOT(onClickOnlineConnect()));

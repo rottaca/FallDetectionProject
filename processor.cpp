@@ -66,9 +66,11 @@ void Processor::newEvent(const sDVSEventDepacked & event)
 
 void Processor::newFrame(const caerFrameEvent &frame)
 {
-
-    assert(frame->lengthX == m_sx);
-    assert(frame->lengthY == m_sy);
+    if(frame->lengthX != m_sx ||
+            frame->lengthY != m_sy) {
+        std::cerr << "Invalid frame size" <<std::endl;
+        return;
+    }
     {
         QMutexLocker locker(&m_frameMutex);
         m_newFrameAvailable = true;
@@ -417,8 +419,8 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
                 }
             }
         } else if(newCenter.y() > FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL &&
-                  st.velocityNorm.y() >= FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD &&
-                  st.velocityNorm.y() <= FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD) {
+                  st.velocityNorm.y() >= settings.fall_detector_y_speed_min_threshold &&
+                  st.velocityNorm.y() <= settings.fall_detector_y_speed_max_threshold) {
             st.possibleFall = true;
 
             cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());

@@ -29,6 +29,10 @@ class Processor:  public QObject,
 public:
     Processor();
 
+    void setSettings(tSettings &settings)
+    {
+        this->settings = settings;
+    }
     void start(uint16_t sx, uint16_t sy);
     void stop();
 
@@ -117,6 +121,7 @@ private:
     bool findFallingPersonInROI(cv::Rect roi);
 
 private:
+    tSettings settings;
     std::atomic_bool m_isRunning;
     QFuture<void> m_future;
 

@@ -50,10 +50,25 @@
 
 // Fall detector
 // Coordiante system: top -> y = 0, bottom -> y == DAVIS_IMG_HEIGHT
-#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (2.5)
+#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (2.9)
 #define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (5)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (2*180/3)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (3*180/5)
+
+
+
+typedef struct tSettings {
+    double fall_detector_y_speed_min_threshold;
+    double fall_detector_y_speed_max_threshold;
+
+    tSettings()
+    {
+        fall_detector_y_speed_min_threshold = FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD;
+        fall_detector_y_speed_max_threshold = FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD;
+    }
+
+} tSettings;
+
 
 
 #endif // SETTINGS_H

@@ -35,7 +35,11 @@ public:
     {
         processingStopped = true;
     }
-
+    void setSettings(tSettings &settings)
+    {
+        this->settings = settings;
+        proc.setSettings(settings);
+    }
 
 public slots:
     void redrawUI();
@@ -61,6 +65,7 @@ private:
     AspectRatioPixmap * imgFalls[TRACK_BIGGEST_N_BOXES];
     bool  exitAfterPlayback;
     bool processingStopped;
+    tSettings settings;
 
 };
 

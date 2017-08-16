@@ -390,22 +390,28 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
         newVelocity.setX(1000000*(newCenter.x()-st.center.x())/st.deltaTimeLastDataUpdateUs);
         newVelocity.setY(1000000*(newCenter.y()-st.center.y())/st.deltaTimeLastDataUpdateUs);
 
+        // Smooth velocity with linear smoothing of previous values
         st.velocityHistory.push_back(newVelocity);
         if(st.velocityHistory.size()>STATS_SPEED_SMOOTHING_WINDOW_SZ) {
             st.velocityHistory.erase(st.velocityHistory.begin());
         }
-
-        st.velocity.setX(0);
-        st.velocity.setY(0);
+        QPointF smoothedVelocity(0,0) ;
         float weightSum = 0;
         for(int i= st.velocityHistory.size()-1; i >= 0; i--) {
             const QPointF& p = st.velocityHistory.at(i);
-            st.velocity += (i+1)*p;
+            smoothedVelocity += (i+1)*p;
             weightSum += (i+1);
         }
-        st.velocity /= weightSum;
+        smoothedVelocity /= weightSum;
+        st.velocity = smoothedVelocity;
 
         st.velocityNorm = st.velocity/(2*newStd.y());
+        bool isLocalSpeedMaximum = false;
+        // Was previous speed a local maximum
+        if(st.velocityNormYLastTwo[1] < st.velocityNormYLastTwo[0] &&
+                st.velocityNormYLastTwo[0] > st.velocityNorm.y()) {
+            isLocalSpeedMaximum = true;
+        }
 
         if(st.possibleFall) {
             if(newCenter.y() < FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL) {
@@ -416,12 +422,14 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
                 if(findFallingPersonInROI(cvRoi)) {
                     printf("%04u, [Fall]: Delayed detected, Speed (norm): %f, Time: %u\n",st.id, st.velocityNorm.y(),currTime);
                     st.confirmendFall = true;
+                    st.fallTime = currTime;
                 }
             }
-        } else if(newCenter.y() > FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL &&
-                  st.velocityNorm.y() >= settings.fall_detector_y_speed_min_threshold &&
-                  st.velocityNorm.y() <= settings.fall_detector_y_speed_max_threshold) {
+        } else if(newCenter.y() > FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL && isLocalSpeedMaximum &&
+                  st.velocityNormYLastTwo[0] >= settings.fall_detector_y_speed_min_threshold &&
+                  st.velocityNormYLastTwo[0] <= settings.fall_detector_y_speed_max_threshold) {
             st.possibleFall = true;
+            st.fallTime = currTime;
 
             cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
             if(findFallingPersonInROI(cvRoi)) {
@@ -432,11 +440,16 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
                 printf("%04u, [Fall]: Possibly detected but no human found, Speed (norm): %f, Time: %u\n",st.id, st.velocityNorm.y(),currTime);
             }
         }
+        st.velocityNormYLastTwo[1] = st.velocityNormYLastTwo[0];
+        st.velocityNormYLastTwo[0] = st.velocityNorm.y();
+
     } else {
         st.velocity.setX(0);
         st.velocity.setY(0);
         st.velocityNorm.setX(0);
         st.velocityNorm.setY(0);
+        st.velocityNormYLastTwo[1] = 0;
+        st.velocityNormYLastTwo[0] = 0;
     }
 
     st.center = newCenter;

@@ -10,6 +10,7 @@ SimpleTimePlot::SimpleTimePlot(QWidget *parent) : QWidget(parent),m_tite("Untitl
 void SimpleTimePlot::paintEvent(QPaintEvent* event)
 {
     QMutexLocker locker(&m_dataMutex);
+    QMutexLocker locker2(&m_lineMutex);
     cleanupMap();
 
     QPainter painter(this);
@@ -21,15 +22,15 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     if(m_data.size() <= 1)
         return;
 
-    QVector<QLineF> lines;
-    lines.reserve(m_data.size()-1);
+    QVector<QLineF> lineSegments;
+    lineSegments.reserve(m_data.size()-1);
     QPointF lastPoint(0,0);
     double x,y;
     bool isOutside = false;
     bool skippedFirst = false;
     double dx = m_xMax-m_xMin;
     double dy = m_yMax-m_yMin;
-    QVector<QLineF> sepLines;
+    QVector<QLineF> sepLines, lines;
 
     for(auto const& p: m_data) {
         // y = INF ?
@@ -65,7 +66,7 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
             newPoint.setY(y);
 
             if(skippedFirst && !isnanf(newPoint.y()) && !isnanf(lastPoint.y()))
-                lines.append(QLineF(lastPoint,newPoint));
+                lineSegments.append(QLineF(lastPoint,newPoint));
             skippedFirst = true;
 
         }
@@ -80,7 +81,7 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
             isOutside = true;
 
             if(skippedFirst && !isnanf(newPoint.y()) && !isnanf(lastPoint.y()))
-                lines.append(QLineF(lastPoint,newPoint));
+                lineSegments.append(QLineF(lastPoint,newPoint));
             skippedFirst = true;
         } // Store point for next run only
         else {
@@ -90,11 +91,18 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
 
         lastPoint = newPoint;
     }
-
-    painter.drawLines(lines);
+    for(auto const& p: m_lines) {
+        // Horizontal line
+        x = plotFrame.x()+(p - m_xMin)/dx*plotFrame.width();
+        lines.append(QLineF(x,plotFrame.y(),x,plotFrame.y()+plotFrame.height()));
+    }
+    painter.drawLines(lineSegments);
     painter.setPen(QPen(Qt::blue,2));
     painter.drawLines(sepLines);
+    painter.setPen(QPen(Qt::red,2));
+    painter.drawLines(lines);
 
+    painter.setPen(QPen(Qt::black));
     // Print value next to line end
     QFontMetrics fm = painter.fontMetrics();
     if(!isnanf(m_data.rbegin()->second)) {
@@ -139,14 +147,21 @@ void SimpleTimePlot::cleanupMap()
     // Check if we are the first element in the list
     // If yes, do nothing
     int dist = std::distance(m_data.begin(),itEnd);
-    if(dist <= 0)
+    if(dist > 0) {
+        // Keep the found element for clipping
+        // Only delete previous elements
+        m_data.erase(m_data.begin(),itEnd);
+    }
+
+    auto itEnd2 = std::lower_bound(m_lines.begin(),m_lines.end(), m_xMin);
+    if(itEnd2 == m_lines.end())
         return;
-
-    // Keep the found element for clipping
-    // Only delete previous elements
-    itEnd--;
-
-    // Erase all old values
-    while(m_data.begin() != itEnd)
-        m_data.erase(m_data.begin());
+    // Check if we are the first element in the list
+    // If yes, do nothing
+    int dist2 = std::distance(m_lines.begin(),itEnd2);
+    if(dist2 > 0) {
+        // Only delete previous elements
+        // Erase all old values
+        m_lines.erase(m_lines.begin(),itEnd2);
+    }
 }

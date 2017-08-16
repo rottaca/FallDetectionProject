@@ -28,6 +28,16 @@ public:
         m_xMax = x;
     }
 
+    void addLine(double x)
+    {
+        if(!ValidDouble(x))
+            return;
+        QMutexLocker locker(&m_lineMutex);
+
+        if(std::find(m_lines.begin(),m_lines.end(),x) == m_lines.end())
+            m_lines.push_back(x);
+    }
+
     void setYRange(double yMin, double yMax)
     {
         if(!ValidDouble(yMin) || !ValidDouble(yMin))
@@ -81,6 +91,8 @@ private:
     double m_xMin, m_xMax, m_yMin, m_yMax;
     std::map<double, double> m_data;
 
+    QMutex m_lineMutex;
+    std::vector<double> m_lines;
     QString m_tite;
 };
 #endif // SIMPLETIMEPLOT_H

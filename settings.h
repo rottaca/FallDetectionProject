@@ -8,7 +8,7 @@
 // Time window in microseconds
 #define TIME_WINDOW_US 100000
 // Update intervals for user interface and computations
-#define UPDATE_INTERVAL_COMP_US 10000
+#define UPDATE_INTERVAL_COMP_US 20000
 #define UPDATE_INTERVAL_UI_US 20000
 // Timerange of plots
 #define PLOT_TIME_RANGE_US 10000000 // 10 sec
@@ -46,12 +46,12 @@
 #define TRACK_IMG_BORDER_SIZE (50)
 
 // Statistics computations
-#define STATS_SPEED_SMOOTHING_WINDOW_SZ (150000/UPDATE_INTERVAL_COMP_US)
+#define STATS_SPEED_SMOOTHING_WINDOW_SZ (120000/UPDATE_INTERVAL_COMP_US)
 
 // Fall detector
 // Coordiante system: top -> y = 0, bottom -> y == DAVIS_IMG_HEIGHT
-#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (2.9)
-#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (5)
+#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (2.7)
+#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (10)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (2*180/3)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (3*180/5)
 

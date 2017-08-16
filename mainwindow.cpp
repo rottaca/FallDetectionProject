@@ -177,8 +177,11 @@ void MainWindow::redrawUI()
             Processor::sObjectStats stats = statsList.at(0);
             lastObjId = stats.id;
             plotEventsInWindow->addPoint(time,stats.evCnt);
+            plotEventsInWindow->addLine(stats.fallTime);
             plotVerticalCentroid->addPoint(time,stats.center.y());
+            plotVerticalCentroid->addLine(stats.fallTime);
             plotSpeed->addPoint(time,stats.velocityNorm.y());
+            plotSpeed->addLine(stats.fallTime);
         } else {
             if(lastObjId != -1) {
                 plotEventsInWindow->addPoint(time,INFINITY);

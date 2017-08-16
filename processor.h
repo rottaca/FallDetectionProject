@@ -57,11 +57,12 @@ public:
         QPointF velocity;
         std::vector<QPointF> velocityHistory;
         QPointF velocityNorm;
+        float velocityNormYLastTwo[2];
         QPointF std;
         QRectF roi,prevRoi;
         QRectF stdDevBox;
         size_t evCnt;
-        uint64_t lastROIUpdate, deltaTimeLastDataUpdateUs;
+        uint64_t lastROIUpdate, deltaTimeLastDataUpdateUs, fallTime;
         uint32_t id;
         bool trackingLost;
         bool possibleFall, confirmendFall;
@@ -78,6 +79,8 @@ public:
             evCnt = 0;
             lastROIUpdate = 0;
             deltaTimeLastDataUpdateUs = 0;
+            velocityNormYLastTwo[0] = 0;
+            velocityNormYLastTwo[1] = 0;
         }
 
     } sObjectStats;

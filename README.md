@@ -28,7 +28,9 @@ Last result g(t-1) | ![Last result g(t-1)](Images/Extended/2b_smoothBlurred.jpg)
 Temporal blurred g(t)=0.75*f(t)+0.25*g(t-1) | ![Temporal blurred g(t)=0.75*f(t)+0.25*g(t-1)](Images/Extended/2c_avgBlurred.jpg)
 Thresholded | ![Thresholded](Images/Extended/3threshold.jpg)
 
-Finally the bounding box of all moving objects is extracted and the original computation steps (centroid, speed, standard deviation) are performed for each bounding box seperately. Due to the highly increased influence of noise, the resulting speed estimation has to be highpass filtered over time. To reduce the false alarm rate, too small objects and objects with too few events are filtered out.
+Finally the bounding box of all moving objects is extracted and the original computation steps (centroid, speed, standard deviation) are performed for each bounding box seperately. Due to the highly increased influence of noise, the resulting speed estimation has to be highpass filtered over time.
+To reduce the false alarm rate, too small objects and objects with too few events are filtered out. To get a more precise speed estimation for fall detection,
+the system looks for local maxima in the speed curve. Otherwise, due to the high processing rate, the system always reacts to very fast moving objects because their speed estimation "slowly" reaches their actual value (caused by smoothing). By taking the local maximum, always the peak velocity is used for further calculations.
 
 ### Detection Stage
 Now an extended classifier is used to detect falling persons. It detects falling objects by concerning the following features:

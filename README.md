@@ -42,7 +42,7 @@ The used camera is a DAVIS240c from Inilabs [2] and additionally to the asynchro
 After a falling objects is detected, a second classifier tries to decides if the object is a falling human. This implementation uses a boosted cascade classifier on the provided grayscale image to detect falling humans which is trained with a recorded training set.
 
 ### Parameter Adjustment
-To get the maximum performance, a subset of system parameters is optimized by implementing an automatic ROC-curve computation and analysis framework implemented in python. Different parameters values were used and the individual hit and miss rates were computed. This information is then used to generate the ROC curve and different performance measures were used to select the best performing parameter value. Have a look at [this repository](!https://github.com/rottaca/FallDetectionProjectEvaluationAndTraining) for the training and evaulation scripts and other tools used for training and evaluating the system.
+To get the maximum performance, a subset of system parameters is optimized by implementing an automatic ROC-curve computation and analysis framework implemented in python. Different parameters values were used and the individual hit and miss rates were computed. This information is then used to generate the ROC curve and different performance measures were used to select the best performing parameter value. Have a look at [this repository](https://github.com/rottaca/FallDetectionProjectEvaluationAndTraining) for the training and evaulation scripts and other tools used for training and evaluating the system.
 
 ## References
 [1]: Fu, Z., Delbruck, T., Lichtsteiner, P., & Culurciello, E. (2008). An address-event

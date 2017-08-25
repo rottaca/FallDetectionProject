@@ -5,9 +5,10 @@
 #include <QPaintEvent>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPen>
 
 #include <assert.h>
-#include <set>
+#include <map>
 
 
 class SimpleTimePlot : public QWidget
@@ -28,14 +29,27 @@ public:
         m_xMax = x;
     }
 
-    void addLine(double x)
+    void addLine(int groupIdx, double x, QPen p)
     {
         if(!ValidDouble(x))
             return;
         QMutexLocker locker(&m_lineMutex);
 
-        if(std::find(m_lines.begin(),m_lines.end(),x) == m_lines.end())
-            m_lines.push_back(x);
+        if(m_lines.find(groupIdx) == m_lines.end()) {
+            m_lines[groupIdx] = LineGroup();
+            m_lines[groupIdx].pen = p;
+            m_lines[groupIdx].active = true;
+        }
+        LineGroup &lg = m_lines[groupIdx];
+        if(std::find(lg.positions.begin(),lg.positions.end(),x) == lg.positions.end())
+            lg.positions.push_back(x);
+    }
+
+    void setLineGroupActive(int groupIdx,bool active)
+    {
+        if(m_lines.find(groupIdx) != m_lines.end()) {
+            m_lines[groupIdx].active = active;
+        }
     }
 
     void setYRange(double yMin, double yMax)
@@ -66,8 +80,14 @@ public:
 
     void clear()
     {
-        QMutexLocker locker(&m_dataMutex);
-        m_data.clear();
+        {
+            QMutexLocker locker(&m_dataMutex);
+            m_data.clear();
+        }
+        {
+            QMutexLocker locker(&m_lineMutex);
+            m_lines.clear();
+        }
     }
 
 private:
@@ -92,7 +112,12 @@ private:
     std::map<double, double> m_data;
 
     QMutex m_lineMutex;
-    std::vector<double> m_lines;
+    typedef struct LineGroup {
+        std::vector<double> positions;
+        QPen pen;
+        bool active;
+    } LineGroup;
+    std::map<int,LineGroup> m_lines;
     QString m_tite;
 };
 #endif // SIMPLETIMEPLOT_H

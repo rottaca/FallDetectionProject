@@ -55,32 +55,37 @@ public:
     typedef struct sObjectStats {
         QPointF center;
         QPointF velocity;
-        std::vector<QPointF> velocityHistory;
         QPointF velocityNorm;
-        float velocityNormYLastTwo[2];
+        float velocityNormYHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD];
+        float centerYHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD];
+        bool trackingLostHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD];
+        uint64_t timeHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD];
         QPointF std;
         QRectF roi,prevRoi;
         QRectF stdDevBox;
         size_t evCnt;
-        uint64_t lastROIUpdate, deltaTimeLastDataUpdateUs, fallTime;
+        uint64_t lastTrackingUpdate, deltaTimeLastDataUpdateUs, fallTime;
         uint32_t id;
-        bool trackingLost;
         bool possibleFall, confirmendFall;
-        bool trackingPreviouslyLost;
-
+        bool initialized;
         cv::Mat roiHist;
+
         sObjectStats()
         {
+            initialized = false;
             confirmendFall = false;
             possibleFall = false;
-            trackingLost = true;
-            trackingPreviouslyLost = true;
             id = -1;
             evCnt = 0;
-            lastROIUpdate = 0;
+            lastTrackingUpdate = 0;
             deltaTimeLastDataUpdateUs = 0;
-            velocityNormYLastTwo[0] = 0;
-            velocityNormYLastTwo[1] = 0;
+            for(int i = 0; i < FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD; i++) {
+                velocityNormYHistory[i] = 0;
+                centerYHistory[i] = 0;
+                trackingLostHistory[i] = false;
+                timeHistory[i] = 0;
+            }
+            fallTime = 0;
         }
 
     } sObjectStats;
@@ -143,8 +148,8 @@ private:
     cv::CascadeClassifier m_cascadeClassifier;
 
     // Time in us
-    int m_timewindow;
-    int m_updateStatsInterval;
+    const int m_timewindow;
+    const int m_updateStatsInterval;
     QElapsedTimer m_updateStatsTimer;
 
     QMutex m_statsMutex;

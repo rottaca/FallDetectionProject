@@ -62,7 +62,6 @@ private:
     SimpleTimePlot *plotVerticalCentroid;
     SimpleTimePlot *plotSpeed;
     int lastObjId;
-    AspectRatioPixmap * imgFalls[TRACK_BIGGEST_N_BOXES];
     bool  exitAfterPlayback;
     bool processingStopped;
     tSettings settings;

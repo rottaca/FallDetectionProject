@@ -17,7 +17,6 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     QRectF plotFrame = drawFrame(&painter);
     QPointF plotFrameLowRight(plotFrame.x()+plotFrame.width(),
                               plotFrame.y()+plotFrame.height());
-    painter.setPen(QPen(Qt::black));
 
     if(m_data.size() <= 1)
         return;
@@ -30,15 +29,10 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     bool skippedFirst = false;
     double dx = m_xMax-m_xMin;
     double dy = m_yMax-m_yMin;
-    QVector<QLineF> sepLines, lines;
 
     for(auto const& p: m_data) {
         // y = INF ?
         if(p.second > std::numeric_limits<qreal>::max() ) {
-            // Horizontal line
-            x = plotFrame.x()+(p.first - m_xMin)/dx*plotFrame.width();
-
-            sepLines.append(QLineF(x,plotFrame.y(),x,plotFrame.y()+plotFrame.height()));
             lastPoint.setX(0);
             lastPoint.setY(0);
             isOutside = false;
@@ -91,16 +85,22 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
 
         lastPoint = newPoint;
     }
-    for(auto const& p: m_lines) {
-        // Horizontal line
-        x = plotFrame.x()+(p - m_xMin)/dx*plotFrame.width();
-        lines.append(QLineF(x,plotFrame.y(),x,plotFrame.y()+plotFrame.height()));
+
+    for(auto const& l: m_lines) {
+        if(!l.second.active)
+            continue;
+        QVector<QLineF> lines;
+        for(auto const& p: l.second.positions) {
+            // Horizontal line
+            x = plotFrame.x()+(p - m_xMin)/dx*plotFrame.width();
+            lines.append(QLineF(x,plotFrame.y()+1,x,plotFrame.y()+plotFrame.height()-1));
+        }
+        painter.setPen(l.second.pen);
+        painter.drawLines(lines);
     }
+
+    painter.setPen(QPen(Qt::black));
     painter.drawLines(lineSegments);
-    painter.setPen(QPen(Qt::blue,2));
-    painter.drawLines(sepLines);
-    painter.setPen(QPen(Qt::red,2));
-    painter.drawLines(lines);
 
     painter.setPen(QPen(Qt::black));
     // Print value next to line end
@@ -112,14 +112,13 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
         y = qMin(plotFrame.y()+plotFrame.height(),qMax(plotFrame.y()+fm.height(),lastPoint.y()-5));
         painter.drawText(x,y,val);
     }
-
 }
 QRect SimpleTimePlot::drawFrame(QPainter *painter)
 {
     int borderX = 50;
     int borderY = 20;
     QRect plotFrame(borderX,borderY,qMax(0,width()-2*borderX),qMax(0,height()-2*borderY));
-    painter->setPen(QPen(Qt::red));
+    painter->setPen(QPen(Qt::black));
     //painter->drawRect(0,0,width()-1,height()-1);
     painter->drawRect(plotFrame);
 
@@ -153,15 +152,17 @@ void SimpleTimePlot::cleanupMap()
         m_data.erase(m_data.begin(),itEnd);
     }
 
-    auto itEnd2 = std::lower_bound(m_lines.begin(),m_lines.end(), m_xMin);
-    if(itEnd2 == m_lines.end())
-        return;
-    // Check if we are the first element in the list
-    // If yes, do nothing
-    int dist2 = std::distance(m_lines.begin(),itEnd2);
-    if(dist2 > 0) {
-        // Only delete previous elements
-        // Erase all old values
-        m_lines.erase(m_lines.begin(),itEnd2);
+    for (auto lg: m_lines) {
+        auto itEnd2 = std::lower_bound(lg.second.positions.begin(),lg.second.positions.end(),m_xMin);
+        if(itEnd2 == lg.second.positions.end())
+            return;
+        // Check if we are the first element in the list
+        // If yes, do nothing
+        int dist2 = std::distance(lg.second.positions.begin(),itEnd2);
+        if(dist2 > 0) {
+            // Only delete previous elements
+            // Erase all old values
+            lg.second.positions.erase(lg.second.positions.begin(),itEnd2);
+        }
     }
 }

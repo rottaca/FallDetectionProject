@@ -30,11 +30,13 @@
 // Threshold for binarizing the resulting smoothed image
 // Lower values expand the contour, higher values are closer to the original shape
 #define TRACK_BOX_DETECTOR_THRESHOLD (255*0.04)
+// Minimum number of events in bounding box
+#define TRACK_MIN_EVENT_CNT (3000)
 
 // Ratio between overlap of bounding boxes
 // and size of old box: How high has the overlap to be
 // To match the old bbox
-#define TRACK_MIN_OVERLAP_RATIO 0.7
+#define TRACK_MIN_OVERLAP_RATIO 0.6
 // Optional scaling factor for detected bounding boxes
 #define TRACK_BOX_SCALE 1.1
 // Minimum area of bouding boxes to remove noise
@@ -43,28 +45,39 @@
 #define TRACK_BIGGEST_N_BOXES 3
 // An object has to be at least with some parts inside the inner image region inside
 // the defined boundary, otherwise the detected rectangle is ignored. This reduces false alarms
-#define TRACK_IMG_BORDER_SIZE (50)
+#define TRACK_IMG_BORDER_SIZE_HORIZONTAL (60)
+#define TRACK_IMG_BORDER_SIZE_VERTICAL (10)
 
 // Statistics computations
-#define STATS_SPEED_SMOOTHING_WINDOW_SZ (120000/UPDATE_INTERVAL_COMP_US)
+#define STATS_SPEED_SMOOTHING_COEFF (0.3)
 
 // Fall detector
 // Coordiante system: top -> y = 0, bottom -> y == DAVIS_IMG_HEIGHT
-#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (2.7)
-#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (10)
-#define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (2*180/3)
-#define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (3*180/5)
+#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (2)
+#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (4)
+#define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (135)
+#define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (110)
+// Neighborhood for local speed maxima estimation
+// System response is delayed by 0.5*(window size)/UPDATE_INTERVAL_COMP_US
+// Neighborhood has to be odd
+#define FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD (11)
 
-
+// Uncomment, to use all event for center and stddev computation
+// Otherwise, each pixel is only considerend once
+// Multiple events are ignored
+//#define FALL_DETECTOR_COMP_STATS_ALL_EVENTS
 
 typedef struct tSettings {
     double fall_detector_y_speed_min_threshold;
     double fall_detector_y_speed_max_threshold;
-
+    double fall_detector_y_center_threshold_fall;
+    double fall_detector_y_center_threshold_unfall;
     tSettings()
     {
         fall_detector_y_speed_min_threshold = FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD;
         fall_detector_y_speed_max_threshold = FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD;
+        fall_detector_y_center_threshold_fall = FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL;
+        fall_detector_y_center_threshold_unfall = FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL;
     }
 
 } tSettings;

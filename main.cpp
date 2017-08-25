@@ -27,23 +27,38 @@ int main(int argc, char *argv[])
     QCommandLineOption maxYSpeedThresholdOpt("maxSpeed","Maximal fall speed threshold for fall detection.", "maxSpeed");
     parser.addOption(maxYSpeedThresholdOpt);
 
+    QCommandLineOption fallYCenterThresholdOpt("fallY","Lower bound for y coordinate to be a valid fall (Y axis points down!).", "fallY");
+    parser.addOption(fallYCenterThresholdOpt);
+    QCommandLineOption unfallYCenterThresholdOpt("unfallY","Lower bound for y coordinate to undo a fall (Y axis points down!)", "unfallY");
+    parser.addOption(unfallYCenterThresholdOpt);
+
     parser.process(a);
 
     const QStringList args = parser.positionalArguments();
     QString minYSpeed = parser.value(minYSpeedThresholdOpt);
     QString maxYSpeed = parser.value(maxYSpeedThresholdOpt);
+    QString fallYCenter = parser.value(fallYCenterThresholdOpt);
+    QString unfallYCenter = parser.value(unfallYCenterThresholdOpt);
     bool minimized = parser.isSet(minimizeOption);
     bool maximized = parser.isSet(maximizeOption);
 
     tSettings settings;
     if(!minYSpeed.isEmpty()) {
         settings.fall_detector_y_speed_min_threshold = minYSpeed.toDouble();
-        qDebug("MinSpeed: %f", settings.fall_detector_y_speed_min_threshold);
     }
     if(!maxYSpeed.isEmpty()) {
         settings.fall_detector_y_speed_max_threshold = maxYSpeed.toDouble();
-        qDebug("MaxSpeed: %f", settings.fall_detector_y_speed_max_threshold);
     }
+    if(!fallYCenter.isEmpty()) {
+        settings.fall_detector_y_center_threshold_fall = fallYCenter.toDouble();
+    }
+    if(!unfallYCenter.isEmpty()) {
+        settings.fall_detector_y_center_threshold_unfall = unfallYCenter.toDouble();
+    }
+    qDebug("y_speed_max_threshold: %f", settings.fall_detector_y_speed_max_threshold);
+    qDebug("y_speed_min_threshold: %f", settings.fall_detector_y_speed_min_threshold);
+    qDebug("y_center_threshold_fall: %f", settings.fall_detector_y_center_threshold_fall);
+    qDebug("y_center_threshold_unfall: %f", settings.fall_detector_y_center_threshold_unfall);
 
     if(minimized)
         w.showMinimized();

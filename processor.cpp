@@ -146,27 +146,27 @@ std::vector<cv::Rect> Processor::detect()
         *p = 255;
     }
     m_eventBuffer.releaseLockedBuffer();
-
-    if(TRACK_OPENING_KERNEL_SZ > 1) {
-        cv::Mat element = cv::getStructuringElement( cv::MORPH_OPEN, cv::Size( TRACK_OPENING_KERNEL_SZ, TRACK_OPENING_KERNEL_SZ ));
-
-        cv::morphologyEx( m_bufferImg, m_bufferImg, cv::MORPH_OPEN, element );
-
-    }
-
+    // Perform opening if requrested
+#if TRACK_OPENING_KERNEL_SZ > 1
+    cv::Mat element = cv::getStructuringElement( cv::MORPH_OPEN, cv::Size( TRACK_OPENING_KERNEL_SZ, TRACK_OPENING_KERNEL_SZ ));
+    cv::morphologyEx( m_bufferImg, m_bufferImg, cv::MORPH_OPEN, element );
+#endif
+    // Blur image
     cv::GaussianBlur(m_bufferImg,m_bufferImg,
                      cv::Size(TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ,TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ),
                      TRACK_BOX_DETECTOR_GAUSS_SIGMA,TRACK_BOX_DETECTOR_GAUSS_SIGMA,cv::BORDER_REPLICATE);
+
     if(m_smoothBufferImg.empty()) {
         m_smoothBufferImg = m_bufferImg;
         m_smoothBufferImg.setTo(0);
     }
 
+    // Overwrite smoothbuffer and current buffer in a single pass
     uchar* bPtr = m_bufferImg.ptr();
     uchar* sPtr = m_smoothBufferImg.ptr();
 
     for(int i = 0; i < m_bufferImg.cols*m_bufferImg.rows; i++) {
-        *bPtr = 0.6*(*bPtr)+0.4*(*sPtr);
+        *bPtr = TRACK_BOX_TEMPORAL_SMOOTHING*(*bPtr)+(1-TRACK_BOX_TEMPORAL_SMOOTHING)*(*sPtr);
         *sPtr = *bPtr;
         bPtr++;
         sPtr++;
@@ -212,8 +212,8 @@ std::vector<cv::Rect> Processor::detect()
     for(int i = 0; i < qMin((int)tmpBoxes2.size(), TRACK_BIGGEST_N_BOXES); i++) {
         cv::Rect r=tmpBoxes2.at(i);
         // Expand bounding box
-        r.x = qMax(0.0,r.x-r.width*(1-TRACK_BOX_SCALE)/2);
-        r.y = qMax(0.0,r.y-r.height*(1-TRACK_BOX_SCALE)/2);
+        r.x = qMax(0.0,r.x-r.width*(TRACK_BOX_SCALE-1.0)/2.0);
+        r.y = qMax(0.0,r.y-r.height*(TRACK_BOX_SCALE-1.0)/2.0);
         r.width = qMin(m_sx - r.x - 1.0,r.width*TRACK_BOX_SCALE);
         r.height = qMin(m_sy - r.y - 1.0,r.height*TRACK_BOX_SCALE);
         if(r.area() >= TRACK_MIN_AREA && ((r & imgWithoutBorder).area() > 0)) {
@@ -242,7 +242,7 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
     std::vector<int> trackedRects;
     for(int i = 0; i < oldStats.size(); i++) {
         sObjectStats o = oldStats.at(i);
-        cv::Rect oROI(o.roi.x(),o.roi.y(),o.roi.width(),o.roi.height());
+        cv::Rect oROI(o.bbox.x(),o.bbox.y(),o.bbox.width(),o.bbox.height());
         float sz = oROI.area();
 
         float currScore = 0;
@@ -275,31 +275,20 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         if(currScore > TRACK_MIN_OVERLAP_RATIO) {
             const cv::Rect& r = bboxes.at(idx);
             o.trackingLostHistory[0] = false;
-
-            QRectF newROI(r.x, r.y, r.width, r.height);
-
-//            if(o.trackingLost) {
-//                o.prevRoi = newROI;
-//            } else {
-//                o.prevRoi = o.prevRoi;
-//            }
-            o.prevRoi = o.roi;
-            o.roi = newROI;
+            o.bbox = QRectF(r.x, r.y, r.width, r.height);
             o.lastTrackingUpdate = currTime;
             m_stats.push_back(o);
             trackedRects.push_back(idx);
         }
         // ROI not found but still really new ?
         // possible fall ?
-        else if(o.possibleFall && currTime-o.lastTrackingUpdate < TRACK_DELAY_KEEP_ROI_FALL_US) {
+        else if(o.fallState && currTime-o.lastTrackingUpdate < TRACK_DELAY_KEEP_ROI_FALL_US) {
             o.trackingLostHistory[0] = true;
-            o.prevRoi = o.roi;
             m_stats.push_back(o);
         }
         // No fall
-        else if(!o.possibleFall && currTime-o.lastTrackingUpdate < TRACK_DELAY_KEEP_ROI_US) {
+        else if(!o.fallState && currTime-o.lastTrackingUpdate < TRACK_DELAY_KEEP_ROI_US) {
             o.trackingLostHistory[0] = true;
-            o.prevRoi = o.roi;
             m_stats.push_back(o);
         }
     }
@@ -318,8 +307,7 @@ void Processor::tracking(std::vector<cv::Rect> &bboxes)
         const cv::Rect& r = bboxes.at(i);
         sObjectStats stats;
         stats.id = m_nextId++;
-        stats.roi = QRectF(r.x,r.y,r.width,r.height);
-        stats.prevRoi = stats.roi;
+        stats.bbox = QRectF(r.x,r.y,r.width,r.height);
         stats.lastTrackingUpdate = currTime;
 
         m_stats.push_back(stats);
@@ -338,12 +326,6 @@ void Processor::updateStatistics(uint32_t elapsedTimeUs)
 
 }
 
-inline bool Processor::isInROI(const sDVSEventDepacked& e, const QRectF &roi)
-{
-    return e.x >= roi.x() && e.x <= roi.x()+roi.width() &&
-           e.y >= roi.y() && e.y <= roi.y()+roi.height();
-}
-
 void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 {
     QPointF tmp, newCenter, newStd, newVelocity;
@@ -355,10 +337,8 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 
     cv::Mat maskImg (cv::Size(m_sx,m_sy), CV_8UC1);
     maskImg.setTo(cv::Scalar(0));
-    maskImg(cv::Rect(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height())).setTo(cv::Scalar(255));
+    maskImg(cv::Rect(st.bbox.x(),st.bbox.y(),st.bbox.width(),st.bbox.height())).setTo(cv::Scalar(255));
 
-    // accumulate time
-    st.deltaTimeLastDataUpdateUs += elapsedTimeUs;
     uint32_t currTime = m_eventBuffer.getCurrTime();
     auto & buff = m_eventBuffer.getLockedBuffer();
 
@@ -408,8 +388,8 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     if(st.initialized) {
 
         // Compute velocity if last point was set
-        newVelocity.setX(1000000*(newCenter.x()-st.center.x())/st.deltaTimeLastDataUpdateUs);
-        newVelocity.setY(1000000*(newCenter.y()-st.center.y())/st.deltaTimeLastDataUpdateUs);
+        newVelocity.setX(1000000*(newCenter.x()-st.center.x())/elapsedTimeUs);
+        newVelocity.setY(1000000*(newCenter.y()-st.center.y())/elapsedTimeUs);
 
         st.velocity = (1-STATS_SPEED_SMOOTHING_COEFF)*st.velocity + STATS_SPEED_SMOOTHING_COEFF*newVelocity;
         st.velocityNorm = st.velocity/(2*newStd.y());
@@ -439,15 +419,14 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
             localMaxNormVelocity = st.velocityNormYHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD/2];
         }
 
-        if(st.possibleFall) {
+        cv::Rect cvRoi(st.bbox.x(),st.bbox.y(),st.bbox.width(),st.bbox.height());
+        if(st.fallState != NO_FALL) {
             if(newCenter.y() < settings.fall_detector_y_center_threshold_unfall) {
-                st.possibleFall = false;
-                st.confirmendFall = false;
-            } else if(!st.confirmendFall && m_newFrameAvailable) {
-                cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
+                st.fallState = NO_FALL;
+            } else if(!st.fallState && m_newFrameAvailable) {
                 if(findFallingPersonInROI(cvRoi)) {
                     printf("%04u, [Fall]: Delayed detected, Time: %u\n",st.id, currTime);
-                    st.confirmendFall = true;
+                    st.fallState = FALL_CONFIRMED;
                 }
             }
         } else if(isLocalSpeedMaximum &&
@@ -456,22 +435,15 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
                   st.centerYHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD/2] > settings.fall_detector_y_center_threshold_fall &&
                   localMaxNormVelocity >= settings.fall_detector_y_speed_min_threshold &&
                   localMaxNormVelocity <= settings.fall_detector_y_speed_max_threshold) {
-            st.possibleFall = true;
             st.fallTime = st.timeHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD/2];
-            if(st.trackingLostHistory[0]) {
-                printf("%04u, Tracking lost\n",st.id);
-            }
-
-            cv::Rect cvRoi(st.roi.x(),st.roi.y(),st.roi.width(),st.roi.height());
             if(findFallingPersonInROI(cvRoi)) {
                 printf("%04u, [Fall]: Directly detected, Time: %u, Speed (norm): %f, YCenter: %f\n",st.id, currTime, localMaxNormVelocity,st.centerYHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD/2]);
-                st.confirmendFall = true;
+                st.fallState = FALL_CONFIRMED;
             } else {
+                st.fallState = FALL_POSSIBLE;
                 printf("%04u, [Fall]: Possibly detected but no human found, Time: %u, Speed (norm): %f, YCenter: %f\n",st.id, currTime,localMaxNormVelocity,st.centerYHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD/2]);
             }
         }
-
-
     } else {
         st.initialized = true;
     }
@@ -479,21 +451,15 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     st.center = newCenter;
     st.std = newStd;
     st.evCnt = evCnt;
-    st.deltaTimeLastDataUpdateUs = 0;
-
-    st.stdDevBox.setX(st.center.x()-st.std.x());
-    st.stdDevBox.setY(st.center.y()-st.std.y());
-    st.stdDevBox.setWidth(2*st.std.x()+1);
-    st.stdDevBox.setHeight(2*st.std.y()+1);
 }
 
-bool Processor::findFallingPersonInROI(cv::Rect roi)
+bool Processor::findFallingPersonInROI(cv::Rect bbox)
 {
     std::vector<cv::Rect> detectedObjects;
     QMutexLocker locker(&m_frameMutex);
     cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
                   CV_8UC1, m_currFrame.bits(), m_currFrame.bytesPerLine());
 
-    m_cascadeClassifier.detectMultiScale( image(roi), detectedObjects, 1.05, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
+    m_cascadeClassifier.detectMultiScale( image(bbox), detectedObjects, 1.05, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
     return detectedObjects.size() > 0;
 }

@@ -27,6 +27,9 @@
 #define TRACK_BOX_DETECTOR_GAUSS_SIGMA 10
 // Kernel size
 #define TRACK_BOX_DETECTOR_GAUSS_KERNEL_SZ (TRACK_BOX_DETECTOR_GAUSS_SIGMA*2+1)
+// Temporal exponential smoothing factor of spatially smoothed event image
+// Lower values -> more lowpass
+#define TRACK_BOX_TEMPORAL_SMOOTHING (0.6)
 // Threshold for binarizing the resulting smoothed image
 // Lower values expand the contour, higher values are closer to the original shape
 #define TRACK_BOX_DETECTOR_THRESHOLD (255*0.04)
@@ -36,25 +39,26 @@
 // Ratio between overlap of bounding boxes
 // and size of old box: How high has the overlap to be
 // To match the old bbox
-#define TRACK_MIN_OVERLAP_RATIO 0.6
+#define TRACK_MIN_OVERLAP_RATIO (0.6)
 // Optional scaling factor for detected bounding boxes
-#define TRACK_BOX_SCALE 1.1
+#define TRACK_BOX_SCALE (1.1)
 // Minimum area of bouding boxes to remove noise
 #define TRACK_MIN_AREA (50*50)
 // Assume only N subjects in the scene and remove all smaller boxes before tracking
 #define TRACK_BIGGEST_N_BOXES 3
-// An object has to be at least with some parts inside the inner image region inside
-// the defined boundary, otherwise the detected rectangle is ignored. This reduces false alarms
+// An object's bbox has to overlap with an inner image region, defined by the borders below,
+// otherwise the detected rectangle is ignored. This reduces false alarms.
 #define TRACK_IMG_BORDER_SIZE_HORIZONTAL (60)
 #define TRACK_IMG_BORDER_SIZE_VERTICAL (10)
 
-// Statistics computations
+// Temporal exponential smoothing factor for speed measurements
+// Lower values -> more lowpass
 #define STATS_SPEED_SMOOTHING_COEFF (0.3)
 
 // Fall detector
 // Coordiante system: top -> y = 0, bottom -> y == DAVIS_IMG_HEIGHT
-#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (2)
-#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (4)
+#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (1.8)
+#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (4.5)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (135)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (110)
 // Neighborhood for local speed maxima estimation
@@ -64,7 +68,7 @@
 
 // Uncomment, to use all event for center and stddev computation
 // Otherwise, each pixel is only considerend once
-// Multiple events are ignored
+// Multiple events per pixel are ignored
 //#define FALL_DETECTOR_COMP_STATS_ALL_EVENTS
 
 typedef struct tSettings {

@@ -189,7 +189,7 @@ void MainWindow::redrawUI()
             plotEventsInWindow->addPoint(time,stats.evCnt);
             plotVerticalCentroid->addPoint(time,stats.center.y());
             plotSpeed->addPoint(time,stats.velocityNorm.y());
-            if((stats.confirmendFall || stats.possibleFall) && ui->cb_showFallsInGraph->isChecked()) {
+            if(stats.fallState != Processor::NO_FALL && ui->cb_showFallsInGraph->isChecked()) {
                 plotEventsInWindow->addLine(0,stats.fallTime,penRed);
                 plotVerticalCentroid->addLine(0,stats.fallTime,penRed);
                 plotSpeed->addLine(0,stats.fallTime,penRed);
@@ -237,12 +237,12 @@ void MainWindow::redrawUI()
             if(stats.trackingLostHistory[0] && !ui->cb_showLostTrackingBBox->isChecked())
                 continue;
 
-            if(stats.confirmendFall) {
+            if(stats.fallState & Processor::FALL_CONFIRMED) {
                 if(stats.trackingLostHistory[0])
                     painterEventImg.setPen(penYellow);
                 else
                     painterEventImg.setPen(penGreen);
-            } else if(stats.possibleFall) {
+            } else if(stats.fallState & Processor::FALL_POSSIBLE) {
                 if(stats.trackingLostHistory[0])
                     painterEventImg.setPen(penYellow);
                 else
@@ -253,7 +253,7 @@ void MainWindow::redrawUI()
                 else
                     painterEventImg.setPen(penBlue);
             }
-            painterEventImg.drawRect(stats.roi);
+            painterEventImg.drawRect(stats.bbox);
 
             painterEventImg.setPen(penRed);
             painterEventImg.drawLine(stats.center - QPointF(stats.std.x(),0), stats.center + QPointF(stats.std.x(),0));
@@ -266,8 +266,8 @@ void MainWindow::redrawUI()
 
             painterEventImg.setPen(penRed);
             QString str = QString("%1").arg(stats.id);
-            painterEventImg.drawText(stats.roi.x()+stats.roi.width()-painterEventImg.fontMetrics().width(str)-2,
-                                     stats.roi.y()+painterEventImg.fontMetrics().height(),
+            painterEventImg.drawText(stats.bbox.x()+stats.bbox.width()-painterEventImg.fontMetrics().width(str)-2,
+                                     stats.bbox.y()+painterEventImg.fontMetrics().height(),
                                      str);
         }
         painterEventImg.setPen(penRed);
@@ -286,7 +286,7 @@ void MainWindow::redrawUI()
             if(stats.trackingLostHistory[0] && !ui->cb_showLostTrackingBBox->isChecked())
                 continue;
             painterGrayImg.setPen(penGreen);
-            painterGrayImg.drawRect(stats.roi);
+            painterGrayImg.drawRect(stats.bbox);
         }
         painterGrayImg.end();
         ui->l_gray->setPixmap(pix);

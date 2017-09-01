@@ -19,10 +19,12 @@ Processor::Processor():
     m_currProcFPS = 0;
     m_currFrameFPS = 0;
 
+#if FALL_DETECTOR_POSTCLASSIFY_HUMANS
     if(!m_cascadeClassifier.load("cascade.xml")) {
         std::cerr << "Failded to load classifier" << std::endl;
         exit(1);
     }
+#endif
 
 }
 void Processor::start(uint16_t sx, uint16_t sy)
@@ -342,7 +344,7 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
     uint32_t currTime = m_eventBuffer.getCurrTime();
     auto & buff = m_eventBuffer.getLockedBuffer();
 
-#ifdef FALL_DETECTOR_COMP_STATS_ALL_EVENTS
+#if FALL_DETECTOR_COMP_STATS_ALL_EVENTS
     QPointF sum,sumSquared;
     for(sDVSEventDepacked & e:buff) {
         if(maskImg.at<uchar>(e.y,e.x) == 0)
@@ -431,7 +433,6 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
             }
         } else if(isLocalSpeedMaximum &&
                   !st.trackingLostHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD/2] &&
-                  !st.trackingLostHistory[0] &&
                   st.centerYHistory[FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD/2] > settings.fall_detector_y_center_threshold_fall &&
                   localMaxNormVelocity >= settings.fall_detector_y_speed_min_threshold &&
                   localMaxNormVelocity <= settings.fall_detector_y_speed_max_threshold) {
@@ -455,6 +456,7 @@ void Processor::updateObjectStats(sObjectStats &st, uint32_t elapsedTimeUs)
 
 bool Processor::findFallingPersonInROI(cv::Rect bbox)
 {
+#if FALL_DETECTOR_POSTCLASSIFY_HUMANS
     std::vector<cv::Rect> detectedObjects;
     QMutexLocker locker(&m_frameMutex);
     cv::Mat image(cv::Size(m_currFrame.width(), m_currFrame.height()),
@@ -462,4 +464,7 @@ bool Processor::findFallingPersonInROI(cv::Rect bbox)
 
     m_cascadeClassifier.detectMultiScale( image(bbox), detectedObjects, 1.05, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
     return detectedObjects.size() > 0;
+#else
+    return true;
+#endif
 }

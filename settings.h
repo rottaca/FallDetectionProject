@@ -33,23 +33,23 @@
 // Threshold for binarizing the resulting smoothed image
 // Lower values expand the contour, higher values are closer to the original shape
 #define TRACK_BOX_DETECTOR_THRESHOLD (255*0.04)
-// Minimum number of events in bounding box
-#define TRACK_MIN_EVENT_CNT (3000)
 
-// Ratio between overlap of bounding boxes
-// and size of old box: How high has the overlap to be
-// To match the old bbox
-#define TRACK_MIN_OVERLAP_RATIO (0.6)
 // Optional scaling factor for detected bounding boxes
 #define TRACK_BOX_SCALE (1.1)
 // Minimum area of bouding boxes to remove noise
 #define TRACK_MIN_AREA (50*50)
+// Minimum number of events in bounding box
+#define TRACK_MIN_EVENT_CNT (3000)
 // Assume only N subjects in the scene and remove all smaller boxes before tracking
 #define TRACK_BIGGEST_N_BOXES 3
 // An object's bbox has to overlap with an inner image region, defined by the borders below,
 // otherwise the detected rectangle is ignored. This reduces false alarms.
 #define TRACK_IMG_BORDER_SIZE_HORIZONTAL (60)
 #define TRACK_IMG_BORDER_SIZE_VERTICAL (10)
+// Ratio between overlap of bounding boxes
+// and size of old box: How high has the overlap to be
+// To match the old bbox
+#define TRACK_MIN_OVERLAP_RATIO (0.6)
 
 // Temporal exponential smoothing factor for speed measurements
 // Lower values -> more lowpass
@@ -66,10 +66,14 @@
 // Neighborhood has to be odd
 #define FALL_DETECTOR_LOCAL_SPEED_MAX_NEIGHBORHOOD (11)
 
-// Uncomment, to use all event for center and stddev computation
+// Use all event for center and stddev computation
 // Otherwise, each pixel is only considerend once
 // Multiple events per pixel are ignored
-//#define FALL_DETECTOR_COMP_STATS_ALL_EVENTS
+#define FALL_DETECTOR_COMP_STATS_ALL_EVENTS false
+
+// Detected falling objects are classified by a cascade classifier
+// To detect humans in falling objects
+#define FALL_DETECTOR_POSTCLASSIFY_HUMANS false
 
 typedef struct tSettings {
     double fall_detector_y_speed_min_threshold;

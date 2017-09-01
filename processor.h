@@ -231,7 +231,10 @@ private:
     QImage m_currFrame;
     bool m_newFrameAvailable;
     u_int32_t m_nextId;
+
+#if FALL_DETECTOR_POSTCLASSIFY_HUMANS
     cv::CascadeClassifier m_cascadeClassifier;
+#endif
 
     // Time in us
     const int m_timewindow;

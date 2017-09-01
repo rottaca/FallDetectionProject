@@ -61,12 +61,12 @@ void MainWindow::setupUI()
     plotVerticalCentroid = new SimpleTimePlot(this);
     plotVerticalCentroid->setYRange(0,180);
     plotVerticalCentroid->setXRange(PLOT_TIME_RANGE_US);
-    plotVerticalCentroid->setTitle("Vertical centroid");
+    plotVerticalCentroid->setTitle("Vertical centroid position");
 
     plotSpeed = new SimpleTimePlot(this);
     plotSpeed->setYRange(-settings.fall_detector_y_speed_max_threshold,settings.fall_detector_y_speed_max_threshold );
     plotSpeed->setXRange(PLOT_TIME_RANGE_US);
-    plotSpeed->setTitle("Centroid horizontal speed");
+    plotSpeed->setTitle("Vertical norm. centroid speed");
 
     ui->gridLayout->addWidget(plotEventsInWindow);
     ui->gridLayout->addWidget(plotVerticalCentroid);
@@ -222,8 +222,8 @@ void MainWindow::redrawUI()
         if(ui->cb_showHelpLines->isChecked()) {
             painterEventImg.setPen(penRed);
             painterEventImg.drawRect(TRACK_IMG_BORDER_SIZE_HORIZONTAL,TRACK_IMG_BORDER_SIZE_VERTICAL,
-                                     grayImg.width()-2*TRACK_IMG_BORDER_SIZE_HORIZONTAL,
-                                     grayImg.height()-2*TRACK_IMG_BORDER_SIZE_VERTICAL);
+                                     grayImg.width()-2*TRACK_IMG_BORDER_SIZE_HORIZONTAL-1,
+                                     grayImg.height()-2*TRACK_IMG_BORDER_SIZE_VERTICAL-1);
             painterEventImg.setPen(penRed);
             painterEventImg.drawLine(1,settings.fall_detector_y_center_threshold_fall,
                                      grayImg.width()-1,settings.fall_detector_y_center_threshold_fall);
@@ -253,7 +253,8 @@ void MainWindow::redrawUI()
                 else
                     painterEventImg.setPen(penBlue);
             }
-            painterEventImg.drawRect(stats.bbox);
+
+            painterEventImg.drawRect(stats.bbox.x(),stats.bbox.y(),stats.bbox.width()-1,stats.bbox.height()-1);
 
             painterEventImg.setPen(penRed);
             painterEventImg.drawLine(stats.center - QPointF(stats.std.x(),0), stats.center + QPointF(stats.std.x(),0));

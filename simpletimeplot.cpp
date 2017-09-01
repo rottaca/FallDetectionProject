@@ -18,8 +18,8 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     QPointF plotFrameLowRight(plotFrame.x()+plotFrame.width(),
                               plotFrame.y()+plotFrame.height());
 
-    if(m_data.size() <= 1)
-        return;
+    //if(m_data.size() <= 1)
+    //   return;
 
     QVector<QLineF> lineSegments;
     lineSegments.reserve(m_data.size()-1);
@@ -100,12 +100,17 @@ void SimpleTimePlot::paintEvent(QPaintEvent* event)
     }
 
     painter.setPen(QPen(Qt::black));
+    if(m_yMin < 0 && m_yMax > 0) {
+        y = plotFrame.y()+(1-(0 - m_yMin)/dy)*plotFrame.height();
+        lineSegments.append(QLineF(plotFrame.x(),y,plotFrame.x()+plotFrame.width(),y));
+    }
+
     painter.drawLines(lineSegments);
 
     painter.setPen(QPen(Qt::black));
     // Print value next to line end
     QFontMetrics fm = painter.fontMetrics();
-    if(!isnanf(m_data.rbegin()->second)) {
+    if(m_data.size() > 0 && !isnanf(m_data.rbegin()->second)) {
         QString val = QString("%1").arg(m_data.rbegin()->second);
         x = lastPoint.x()-fm.width(val)-1;
         // Keep y in range of plot
@@ -141,10 +146,6 @@ QRect SimpleTimePlot::drawFrame(QPainter *painter)
 void SimpleTimePlot::cleanupMap()
 {
     auto itEnd = m_data.lower_bound(m_xMin);
-    if(itEnd == m_data.end())
-        return;
-    // Check if we are the first element in the list
-    // If yes, do nothing
     int dist = std::distance(m_data.begin(),itEnd);
     if(dist > 0) {
         // Keep the found element for clipping
@@ -152,17 +153,12 @@ void SimpleTimePlot::cleanupMap()
         m_data.erase(m_data.begin(),itEnd);
     }
 
-    for (auto lg: m_lines) {
-        auto itEnd2 = std::lower_bound(lg.second.positions.begin(),lg.second.positions.end(),m_xMin);
-        if(itEnd2 == lg.second.positions.end())
-            return;
-        // Check if we are the first element in the list
-        // If yes, do nothing
-        int dist2 = std::distance(lg.second.positions.begin(),itEnd2);
+    for (auto &lg: m_lines) {
+        auto& pos = lg.second.positions;
+        auto itEnd2 = std::lower_bound(pos.begin(),pos.end(),m_xMin);
+        int dist2 = std::distance(pos.begin(),itEnd2);
         if(dist2 > 0) {
-            // Only delete previous elements
-            // Erase all old values
-            lg.second.positions.erase(lg.second.positions.begin(),itEnd2);
+            pos.erase(pos.begin(),itEnd2);
         }
     }
 }

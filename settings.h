@@ -11,7 +11,7 @@
 #define UPDATE_INTERVAL_COMP_US 20000
 #define UPDATE_INTERVAL_UI_US 20000
 // Timerange of plots
-#define PLOT_TIME_RANGE_US 10000000 // 10 sec
+#define PLOT_TIME_RANGE_US 5000000 // 10 sec
 // Lowpass filter for smoothing FPS counters
 #define FPS_LOWPASS_FILTER_COEFF 0.1
 
@@ -57,9 +57,9 @@
 
 // Fall detector
 // Coordiante system: top -> y = 0, bottom -> y == DAVIS_IMG_HEIGHT
-#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (1.8)
-#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (4.5)
-#define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (135)
+#define FALL_DETECTOR_Y_SPEED_MIN_THRESHOLD (1.9)
+#define FALL_DETECTOR_Y_SPEED_MAX_THRESHOLD (3.4)
+#define FALL_DETECTOR_Y_CENTER_THRESHOLD_FALL (140)
 #define FALL_DETECTOR_Y_CENTER_THRESHOLD_UNFALL (110)
 // Neighborhood for local speed maxima estimation
 // System response is delayed by 0.5*(window size)/UPDATE_INTERVAL_COMP_US

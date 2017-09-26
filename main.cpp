@@ -11,8 +11,6 @@ int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
     QApplication a(argc, argv);
-    MainWindow w;
-
 
     QCommandLineParser parser;
     parser.addPositionalArgument("playback file",".aedat file to be played.");
@@ -59,6 +57,8 @@ int main(int argc, char *argv[])
     qDebug("y_speed_min_threshold: %f", settings.fall_detector_y_speed_min_threshold);
     qDebug("y_center_threshold_fall: %f", settings.fall_detector_y_center_threshold_fall);
     qDebug("y_center_threshold_unfall: %f", settings.fall_detector_y_center_threshold_unfall);
+
+    MainWindow w(settings,nullptr);
 
     if(minimized)
         w.showMinimized();

@@ -15,7 +15,7 @@ void callbackPlaybackStopped(void * p)
     w->callbackProcessingStopped();
 }
 
-MainWindow::MainWindow(QWidget *parent) :
+MainWindow::MainWindow(tSettings settings, QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
     m_uiRedrawFPS(0)
@@ -23,6 +23,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
 
 
+    this->settings = settings;
     setupUI();
 
     connect(ui->b_online_connect,SIGNAL(clicked()),this,SLOT(onClickOnlineConnect()));
@@ -35,6 +36,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     camHandler.setDVSEventReciever(&proc);
     camHandler.setFrameReciever(&proc);
+    proc.setSettings(settings);
 
     timer = new QTimer(this);
     connect(timer,SIGNAL(timeout()),this,SLOT(redrawUI()));

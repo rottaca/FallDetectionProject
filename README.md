@@ -1,7 +1,9 @@
 # FallDetectionProject
-![Walking Scene](Images/gui1.png)
 
-![Falling Scene](Images/gui2.png)
+![Falling Scene](Images/gui4.png)
+
+![Picking up Scene](Images/gui3.png)
+
 
 ## Previous Work
 This is a computer vision project for University Ulm, Germany. The main goal was to detect falling person with an event based camera system and the basic principal is based on a Paper from Delbruck et al. [1].

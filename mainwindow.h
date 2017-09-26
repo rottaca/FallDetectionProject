@@ -24,7 +24,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = 0);
+    explicit MainWindow(tSettings settings, QWidget *parent = 0);
     ~MainWindow();
 
     void closeEvent (QCloseEvent *event);
@@ -37,8 +37,6 @@ public:
     }
     void setSettings(tSettings &settings)
     {
-        this->settings = settings;
-        proc.setSettings(settings);
     }
 
 public slots:
